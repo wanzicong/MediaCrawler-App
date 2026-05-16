@@ -1,0 +1,30 @@
+# MediaCrawler 本地 MySQL（root / 123456）
+# 管理命令见根目录 package.json：pnpm db:up / db:down / db:reset
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mediacrawler-mysql
+    restart: unless-stopped
+    ports:
+      - '${MYSQL_HOST_PORT:-3306}:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: '123456'
+      MYSQL_DATABASE: media_crawler
+      TZ: Asia/Shanghai
+    volumes:
+      - mediacrawler_mysql_data:/var/lib/mysql
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-uroot', '-p123456']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  mediacrawler_mysql_data:

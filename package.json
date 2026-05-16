@@ -1,0 +1,29 @@
+{
+  "name": "mediacrawler-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MediaCrawler Monorepo - API (Python) + Web (React)",
+  "scripts": {
+    "dev": "pnpm run --parallel /^dev:/",
+    "dev:web": "pnpm --filter mediacrawler-web dev",
+    "dev:api": "cd MediaCrawler-Api && uv run uvicorn api.main:app --host 0.0.0.0 --port 8080 --reload",
+    "build": "pnpm --filter mediacrawler-web build",
+    "build:web": "pnpm --filter mediacrawler-web build",
+    "preview:web": "pnpm --filter mediacrawler-web preview",
+    "lint:web": "pnpm --filter mediacrawler-web lint",
+    "install:api": "cd MediaCrawler-Api && uv sync",
+    "db:up": "node scripts/mysql-manager.mjs up",
+    "db:down": "node scripts/mysql-manager.mjs down",
+    "db:reset": "node scripts/mysql-manager.mjs reset",
+    "db:logs": "node scripts/mysql-manager.mjs logs",
+    "db:wait": "node scripts/mysql-manager.mjs wait",
+    "db:status": "node scripts/mysql-manager.mjs status",
+    "db:sync-env": "node scripts/mysql-manager.mjs sync-env",
+    "db:generate-sql": "node scripts/mysql-manager.mjs generate-sql"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.4"
+}
