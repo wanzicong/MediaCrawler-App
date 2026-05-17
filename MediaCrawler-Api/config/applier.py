@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 import config
+from config.platform_risk_profiles import get_platform_profile
 
 
 def apply_crawler_payload(payload: dict[str, Any]) -> None:
@@ -46,6 +47,10 @@ def apply_crawler_payload(payload: dict[str, Any]) -> None:
     config.CRAWLER_MAX_SLEEP_SEC = int(
         payload.get("crawler_max_sleep_sec", config.CRAWLER_MAX_SLEEP_SEC)
     )
+    if hasattr(config, "CRAWLER_MAX_SLEEP_SEC_MAX"):
+        config.CRAWLER_MAX_SLEEP_SEC_MAX = int(
+            payload.get("crawler_max_sleep_sec_max", config.CRAWLER_MAX_SLEEP_SEC_MAX)
+        )
     config.ENABLE_GET_MEIDAS = bool(payload.get("enable_get_medias", config.ENABLE_GET_MEIDAS))
     config.ENABLE_GET_WORDCLOUD = bool(
         payload.get("enable_get_wordcloud", config.ENABLE_GET_WORDCLOUD)
@@ -57,6 +62,7 @@ def apply_crawler_payload(payload: dict[str, Any]) -> None:
         )
 
     _apply_platform_ids(platform, payload)
+    _apply_platform_risk_profile(platform)
 
 
 def _apply_platform_ids(platform: str, payload: dict[str, Any]) -> None:
@@ -107,3 +113,29 @@ def _apply_platform_ids(platform: str, payload: dict[str, Any]) -> None:
                 else f"https://tieba.baidu.com/home/main?id={item}"
                 for item in creator_list
             ]
+
+
+def _apply_platform_risk_profile(platform: str) -> None:
+    """根据平台风险配置，对运行时 config 施加安全边界"""
+    profile = get_platform_profile(platform)
+    risk_level = profile["risk_level"]
+
+    sleep_min, sleep_max = profile["sleep_interval"]
+    if config.CRAWLER_MAX_SLEEP_SEC < sleep_min:
+        print(f"[RiskProfile] {platform} 最小间隔从 {config.CRAWLER_MAX_SLEEP_SEC}s 调整为 {sleep_min}s（风控等级 {risk_level}）")
+        config.CRAWLER_MAX_SLEEP_SEC = sleep_min
+    if hasattr(config, "CRAWLER_MAX_SLEEP_SEC_MAX") and config.CRAWLER_MAX_SLEEP_SEC_MAX < sleep_max:
+        print(f"[RiskProfile] {platform} 最大间隔从 {config.CRAWLER_MAX_SLEEP_SEC_MAX}s 调整为 {sleep_max}s（风控等级 {risk_level}）")
+        config.CRAWLER_MAX_SLEEP_SEC_MAX = sleep_max
+
+    if config.MAX_CONCURRENCY_NUM > profile["max_concurrency"]:
+        print(f"[RiskProfile] {platform} 并发数从 {config.MAX_CONCURRENCY_NUM} 调整为 {profile['max_concurrency']}（风控等级 {risk_level}）")
+        config.MAX_CONCURRENCY_NUM = profile["max_concurrency"]
+
+    if config.CRAWLER_MAX_NOTES_COUNT > profile["max_notes"]:
+        print(f"[RiskProfile] {platform} 最大条数从 {config.CRAWLER_MAX_NOTES_COUNT} 调整为 {profile['max_notes']}（风控等级 {risk_level}）")
+        config.CRAWLER_MAX_NOTES_COUNT = profile["max_notes"]
+
+    if profile.get("require_cdp") and not config.ENABLE_CDP_MODE:
+        print(f"[RiskProfile] {platform} 强制开启 CDP 模式（风控等级 {risk_level}）")
+        config.ENABLE_CDP_MODE = True

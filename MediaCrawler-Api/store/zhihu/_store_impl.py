@@ -31,6 +31,7 @@ from typing import Dict
 
 import aiofiles
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import config
@@ -112,12 +113,24 @@ class ZhihuDbStoreImplement(AbstractStore):
                 for key, value in content_item.items():
                     if hasattr(existing_content, key):
                         setattr(existing_content, key, value)
+                await session.commit()
             else:
                 if "add_ts" not in content_item:
                     content_item["add_ts"] = utils.get_current_timestamp()
                 new_content = ZhihuContent(**content_item)
-                session.add(new_content)
-            await session.commit()
+                try:
+                    session.add(new_content)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    stmt = select(ZhihuContent).where(ZhihuContent.content_id == content_id)
+                    result = await session.execute(stmt)
+                    existing_content = result.scalars().first()
+                    if existing_content:
+                        for key, value in content_item.items():
+                            if hasattr(existing_content, key):
+                                setattr(existing_content, key, value)
+                    await session.commit()
 
     async def store_comment(self, comment_item: Dict):
         """
@@ -134,12 +147,24 @@ class ZhihuDbStoreImplement(AbstractStore):
                 for key, value in comment_item.items():
                     if hasattr(existing_comment, key):
                         setattr(existing_comment, key, value)
+                await session.commit()
             else:
                 if "add_ts" not in comment_item:
                     comment_item["add_ts"] = utils.get_current_timestamp()
                 new_comment = ZhihuComment(**comment_item)
-                session.add(new_comment)
-            await session.commit()
+                try:
+                    session.add(new_comment)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    stmt = select(ZhihuComment).where(ZhihuComment.comment_id == comment_id)
+                    result = await session.execute(stmt)
+                    existing_comment = result.scalars().first()
+                    if existing_comment:
+                        for key, value in comment_item.items():
+                            if hasattr(existing_comment, key):
+                                setattr(existing_comment, key, value)
+                    await session.commit()
 
     async def store_creator(self, creator: Dict):
         """

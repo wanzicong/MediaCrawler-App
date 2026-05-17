@@ -111,8 +111,11 @@ async def _consume_task_id_from_argv() -> Optional[int]:
     task_id = int(sys.argv[idx + 1])
     del sys.argv[idx : idx + 2]
     from services.task_loader import apply_task_config
+    from services.progress_reporter import init_progress_reporter
 
     await apply_task_config(task_id)
+    reporter = init_progress_reporter(task_id)
+    await reporter.start()
     _current_task_id = task_id
     return task_id
 
@@ -142,7 +145,11 @@ async def main() -> None:
     finally:
         if task_id:
             from services.config_service import ConfigService
+            from services.progress_reporter import get_progress_reporter
 
+            reporter = get_progress_reporter()
+            if reporter:
+                await reporter.stop()
             await ConfigService.mark_task_finished(task_id, success, error_msg)
 
 

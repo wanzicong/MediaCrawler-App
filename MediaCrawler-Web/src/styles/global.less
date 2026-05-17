@@ -1,3 +1,20 @@
+:root {
+  --brand-primary: #5B5FE3;
+  --brand-accent: #F59E0B;
+  --brand-success: #10B981;
+  --brand-error: #EF4444;
+  --sidebar-bg: #0F172A;
+  --sidebar-text: #E2E8F0;
+  --sidebar-subtext: #94A3B8;
+  --text-primary: #1E293B;
+  --text-secondary: #64748B;
+  --text-muted: #94A3B8;
+  --bg-layout: #F1F5F9;
+  --bg-container: #FFFFFF;
+  --border-color: #E2E8F0;
+  --border-light: rgba(255, 255, 255, 0.06);
+}
+
 *,
 *::before,
 *::after {
@@ -8,10 +25,64 @@ html,
 body,
 #root {
   height: 100%;
+  min-height: 100vh;
   margin: 0;
+  width: 100%;
 }
 
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-layout);
+  color: var(--text-primary);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes pageFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-transition {
+  animation: pageFadeIn 0.3s ease;
+}
+
+// ── 表格状态行 ──
+.row-failed td {
+  background: rgba(239, 68, 68, 0.03) !important;
+}
+.row-running td {
+  background: rgba(91, 95, 227, 0.03) !important;
+}
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+
+// --------- 固定操作列遮罩，防止内容穿透 ---------
+.ant-table-cell-fix-right,
+.ant-table-cell-fix-right-first {
+  background: var(--bg-container) !important;
+  z-index: 2;
+}
+
+// 图片在表格中的对齐
+.ant-table-cell .ant-image {
+  vertical-align: middle;
+  display: inline-flex;
+}
+.ant-table-cell .ant-image-img {
+  vertical-align: middle;
 }

@@ -41,6 +41,7 @@ from store import kuaishou as kuaishou_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
 from var import comment_tasks_var, crawler_type_var, source_keyword_var
+from services.progress_reporter import get_progress_reporter
 
 from .client import KuaiShouClient
 from .exception import DataFetchError
@@ -177,10 +178,15 @@ class KuaishouCrawler(AbstractCrawler):
                 page += 1
 
                 # Sleep after page navigation
-                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-                utils.logger.info(f"[KuaishouCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
+                sleep_sec = config.get_sleep_interval()
+                await asyncio.sleep(sleep_sec)
+                utils.logger.info(f"[KuaishouCrawler.search] Sleeping for {sleep_sec:.1f} seconds after page {page-1}")
 
                 await self.batch_get_video_comments(video_id_list)
+
+                reporter = get_progress_reporter()
+                if reporter:
+                    await reporter.report(page=page-1, keyword=source_keyword_var.get())
 
     async def get_specified_videos(self):
         """Get the information and comments of the specified post"""

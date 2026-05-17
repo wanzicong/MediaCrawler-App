@@ -26,10 +26,11 @@ class CrawlerPayloadSchema(BaseModel):
     enable_ip_proxy: bool = False
     ip_proxy_pool_count: int = 2
     ip_proxy_provider_name: str = "kuaidaili"
-    crawler_max_notes_count: int = 15
-    max_concurrency_num: int = 1
-    crawler_max_comments_count_singlenotes: int = 10
-    crawler_max_sleep_sec: int = 2
+    crawler_max_notes_count: int = 100
+    max_concurrency_num: int = 2
+    crawler_max_comments_count_singlenotes: int = 30
+    crawler_max_sleep_sec: int = 5
+    crawler_max_sleep_sec_max: int = 15
     enable_get_medias: bool = False
     enable_get_wordcloud: bool = False
     save_login_state: bool = True
@@ -70,6 +71,7 @@ class TaskResponse(BaseModel):
     status: str
     payload_snapshot: dict[str, Any]
     error_message: Optional[str] = None
+    progress: Optional[dict] = None
     created_at: Optional[str] = None
     started_at: Optional[str] = None
     finished_at: Optional[str] = None

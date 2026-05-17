@@ -44,6 +44,10 @@ class CrawlerManager:
         self._project_root = Path(__file__).parent.parent.parent
         # Log queue - for pushing to WebSocket
         self._log_queue: Optional[asyncio.Queue] = None
+        # Task queue for pending tasks when crawler is busy
+        self._task_queue: List[dict] = []
+        # Guard against concurrent start() calls (TOCTOU prevention)
+        self._starting = False
 
     @property
     def logs(self) -> List[LogEntry]:
@@ -91,11 +95,56 @@ class CrawlerManager:
             return "debug"
         return "info"
 
-    async def start(self, config: CrawlerStartRequest) -> bool:
-        """Start crawler process"""
+    async def start(self, config: CrawlerStartRequest) -> dict:
+        """Start crawler process or queue if busy. Returns {started, queued, task_id, queue_position}"""
         async with self._lock:
+            if self._starting:
+                return {"started": False, "queued": False, "error": "另一个启动请求正在处理中"}
+
             if self.process and self.process.poll() is None:
-                return False
+                # Busy: create task and queue it
+                from services.config_service import ConfigService
+
+                base_payload = await ConfigService.get_default_payload()
+                if config.profile_id:
+                    profile = await ConfigService.get_profile(config.profile_id)
+                    if profile:
+                        base_payload = profile["payload"]
+
+                overrides = config.model_dump(
+                    mode="json",
+                    exclude_none=True,
+                    exclude={"profile_id"},
+                )
+                for k, v in overrides.items():
+                    if hasattr(v, "value"):
+                        overrides[k] = v.value
+                payload = ConfigService.merge_payload(base_payload, overrides)
+                task = await ConfigService.create_task(payload, config.profile_id)
+                self._task_queue.append({"task_id": task["id"], "config": config})
+                pos = len(self._task_queue)
+                entry = self._create_log_entry(
+                    f"Task #{task['id']} queued (position {pos}), crawler is busy",
+                    "info",
+                )
+                await self._push_log(entry)
+                return {"started": False, "queued": True, "task_id": task["id"], "queue_position": pos}
+
+            self._starting = True
+
+        try:
+            # Cancel old log-reading task to avoid stdout competition
+            if self._read_task and not self._read_task.done():
+                self._read_task.cancel()
+                try:
+                    await self._read_task
+                except asyncio.CancelledError:
+                    pass
+            self._read_task = None
+
+            # Reap any zombie process
+            if self.process and self.process.poll() is not None:
+                self.process = None
 
             # Clear old logs
             self._logs = []
@@ -165,12 +214,15 @@ class CrawlerManager:
                 # Start log reading task
                 self._read_task = asyncio.create_task(self._read_output())
 
-                return True
+                return {"started": True, "task_id": task["id"]}
             except Exception as e:
                 self.status = "error"
                 entry = self._create_log_entry(f"Failed to start crawler: {str(e)}", "error")
                 await self._push_log(entry)
-                return False
+                return {"started": False, "queued": False, "error": str(e)}
+        finally:
+            async with self._lock:
+                self._starting = False
 
     async def stop(self) -> bool:
         """Stop crawler process"""
@@ -217,6 +269,15 @@ class CrawlerManager:
 
     def get_status(self) -> dict:
         """Get current status"""
+        # Auto-correct: if status says running but process is dead, reset to idle
+        if self.status in ("running", "stopping"):
+            if self.process and self.process.poll() is not None:
+                self.status = "idle"
+                self.current_task_id = None
+            elif not self.process and self.status != "idle":
+                self.status = "idle"
+                self.current_task_id = None
+
         return {
             "status": self.status,
             "platform": self.current_config.platform.value if self.current_config else None,
@@ -224,28 +285,104 @@ class CrawlerManager:
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "error_message": None,
             "task_id": self.current_task_id,
+            "queue_length": len(self._task_queue),
         }
 
     def _build_command(self, task_id: int) -> list:
         """通过 task_id 从 MySQL 加载配置并启动爬虫"""
         return ["uv", "run", "python", "main.py", "--task-id", str(task_id)]
 
+    async def _dequeue_next(self):
+        """Start next queued task if any"""
+        if not self._task_queue:
+            return
+        pending = self._task_queue.pop(0)
+        task_id = pending["task_id"]
+        self.current_task_id = task_id
+        cmd = self._build_command(task_id)
+
+        entry = self._create_log_entry(
+            f"Starting queued task #{task_id} ({len(self._task_queue)} remaining): {' '.join(cmd)}",
+            "info",
+        )
+        await self._push_log(entry)
+
+        try:
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                bufsize=1,
+                cwd=str(self._project_root),
+                env={**os.environ, "PYTHONUNBUFFERED": "1"}
+            )
+            self.status = "running"
+            self.started_at = datetime.now()
+            self.current_config = pending["config"]
+            entry = self._create_log_entry(
+                f"Queued task #{task_id} started",
+                "success"
+            )
+            await self._push_log(entry)
+            self._read_task = asyncio.create_task(self._read_output())
+        except Exception as e:
+            self.status = "error"
+            entry = self._create_log_entry(f"Failed to start queued task #{task_id}: {str(e)}", "error")
+            await self._push_log(entry)
+            from services.config_service import ConfigService
+            try:
+                await ConfigService.mark_task_finished(task_id, False, f"Failed to start: {str(e)}")
+            except Exception:
+                pass
+
     async def _read_output(self):
         """Asynchronously read process output"""
         loop = asyncio.get_event_loop()
 
-        try:
+        async def _monitor_process():
+            """Monitor that process is alive; trigger recovery if it dies unexpectedly"""
             while self.process and self.process.poll() is None:
-                # Read a line in thread pool
-                line = await loop.run_in_executor(
-                    None, self.process.stdout.readline
+                await asyncio.sleep(5)
+            if self.status == "running":
+                exit_code = self.process.returncode if self.process else -1
+                entry = self._create_log_entry(
+                    f"[Monitor] Process exited with code {exit_code}, triggering recovery",
+                    "warning"
                 )
-                if line:
-                    line = line.strip()
+                await self._push_log(entry)
+
+        monitor_task: Optional[asyncio.Task] = None
+
+        try:
+            monitor_task = asyncio.create_task(_monitor_process())
+
+            while self.process and self.process.poll() is None:
+                try:
+                    line = await asyncio.wait_for(
+                        loop.run_in_executor(None, self.process.stdout.readline),
+                        timeout=10.0
+                    )
                     if line:
-                        level = self._parse_log_level(line)
-                        entry = self._create_log_entry(line, level)
-                        await self._push_log(entry)
+                        line = line.strip()
+                        if line:
+                            level = self._parse_log_level(line)
+                            entry = self._create_log_entry(line, level)
+                            await self._push_log(entry)
+                except asyncio.TimeoutError:
+                    # No output for 10s; check if process still alive
+                    if self.process and self.process.poll() is not None:
+                        break
+                    continue
+
+            # Cancel monitor since process already exited
+            if monitor_task and not monitor_task.done():
+                monitor_task.cancel()
+                try:
+                    await monitor_task
+                except asyncio.CancelledError:
+                    pass
 
             # Read remaining output
             if self.process and self.process.stdout:
@@ -277,12 +414,51 @@ class CrawlerManager:
                     )
                 self.status = "idle"
                 self.current_task_id = None
+                # Check for queued tasks
+                if self._task_queue:
+                    await self._dequeue_next()
 
         except asyncio.CancelledError:
-            pass
+            if monitor_task and not monitor_task.done():
+                monitor_task.cancel()
+                try:
+                    await monitor_task
+                except asyncio.CancelledError:
+                    pass
+            if self.current_task_id:
+                from services.config_service import ConfigService
+                try:
+                    await ConfigService.mark_task_finished(
+                        self.current_task_id, False, "Manager interrupted"
+                    )
+                except Exception:
+                    pass
+            self.status = "idle"
+            self.current_task_id = None
+            raise
         except Exception as e:
+            if monitor_task and not monitor_task.done():
+                monitor_task.cancel()
+                try:
+                    await monitor_task
+                except asyncio.CancelledError:
+                    pass
             entry = self._create_log_entry(f"Error reading output: {str(e)}", "error")
             await self._push_log(entry)
+            # Ensure status is reset even on unexpected errors
+            if self.status == "running":
+                if self.current_task_id and self.process and self.process.poll() is not None:
+                    from services.config_service import ConfigService
+                    await ConfigService.mark_task_finished(
+                        self.current_task_id,
+                        False,
+                        f"Manager error: {str(e)}",
+                    )
+                self.status = "idle"
+                self.current_task_id = None
+                # Check for queued tasks on error too
+                if self._task_queue:
+                    await self._dequeue_next()
 
 
 # Global singleton

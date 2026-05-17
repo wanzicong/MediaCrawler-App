@@ -32,6 +32,7 @@ from tools.async_file_writer import AsyncFileWriter
 
 import aiofiles
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 import config
 from base.base_crawler import AbstractStore
@@ -106,12 +107,23 @@ class KuaishouDbStoreImplement(AbstractStore):
             if not video_detail:
                 content_item["add_ts"] = utils.get_current_timestamp()
                 new_content = KuaishouVideo(**content_item)
-                session.add(new_content)
+                try:
+                    session.add(new_content)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    result = await session.execute(select(KuaishouVideo).where(KuaishouVideo.video_id == video_id))
+                    video_detail = result.scalar_one_or_none()
+                    if video_detail:
+                        for key, value in content_item.items():
+                            if hasattr(video_detail, key):
+                                setattr(video_detail, key, value)
+                    await session.commit()
             else:
                 for key, value in content_item.items():
                     if hasattr(video_detail, key):
                         setattr(video_detail, key, value)
-            await session.commit()
+                await session.commit()
 
     async def store_comment(self, comment_item: Dict):
         """
@@ -128,12 +140,24 @@ class KuaishouDbStoreImplement(AbstractStore):
             if not comment_detail:
                 comment_item["add_ts"] = utils.get_current_timestamp()
                 new_comment = KuaishouVideoComment(**comment_item)
-                session.add(new_comment)
+                try:
+                    session.add(new_comment)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    result = await session.execute(
+                        select(KuaishouVideoComment).where(KuaishouVideoComment.comment_id == comment_id))
+                    comment_detail = result.scalar_one_or_none()
+                    if comment_detail:
+                        for key, value in comment_item.items():
+                            if hasattr(comment_detail, key):
+                                setattr(comment_detail, key, value)
+                    await session.commit()
             else:
                 for key, value in comment_item.items():
                     if hasattr(comment_detail, key):
                         setattr(comment_detail, key, value)
-            await session.commit()
+                await session.commit()
 
 
 class KuaishouJsonStoreImplement(AbstractStore):

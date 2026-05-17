@@ -39,4 +39,9 @@ export async function httpPost<T>(
   return data;
 }
 
+export async function httpDelete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  const { data } = await request.delete<T>(url, config);
+  return data;
+}
+
 export default request;

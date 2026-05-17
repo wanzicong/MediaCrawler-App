@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { Spin } from 'antd';
+import { Skeleton } from 'antd';
 
 import BasicLayout from '@/layouts/BasicLayout';
 
@@ -12,8 +12,8 @@ const NotFoundPage = lazy(() => import('@/pages/NotFound'));
 
 function PageLoader() {
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
-      <Spin size="large" tip="加载中..." />
+    <div style={{ padding: 48 }}>
+      <Skeleton active paragraph={{ rows: 10 }} />
     </div>
   );
 }

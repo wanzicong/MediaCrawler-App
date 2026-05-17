@@ -38,6 +38,7 @@ from store import douyin as douyin_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
 from var import crawler_type_var, source_keyword_var
+from services.progress_reporter import get_progress_reporter
 
 from .client import DouYinClient
 from .exception import DataFetchError
@@ -175,9 +176,14 @@ class DouYinCrawler(AbstractCrawler):
                 # Batch get note comments for the current page
                 await self.batch_get_note_comments(page_aweme_list)
 
+                reporter = get_progress_reporter()
+                if reporter:
+                    await reporter.report(page=page-1, keyword=source_keyword_var.get())
+
                 # Sleep after each page navigation
-                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-                utils.logger.info(f"[DouYinCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
+                sleep_sec = config.get_sleep_interval()
+                await asyncio.sleep(sleep_sec)
+                utils.logger.info(f"[DouYinCrawler.search] Sleeping for {sleep_sec:.1f} seconds after page {page-1}")
             utils.logger.info(f"[DouYinCrawler.search] keyword:{keyword}, aweme_list:{aweme_list}")
 
     async def get_specified_awemes(self):

@@ -40,6 +40,7 @@ from store import xhs as xhs_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
 from var import crawler_type_var, source_keyword_var
+from services.progress_reporter import get_progress_reporter
 
 from .client import XiaoHongShuClient
 from .exception import DataFetchError, NoteNotFoundError
@@ -178,9 +179,14 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     utils.logger.info(f"[XiaoHongShuCrawler.search] Note details: {note_details}")
                     await self.batch_get_note_comments(note_ids, xsec_tokens)
 
+                    reporter = get_progress_reporter()
+                    if reporter:
+                        await reporter.report(page=page-1, keyword=source_keyword_var.get())
+
                     # Sleep after each page navigation
-                    await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-                    utils.logger.info(f"[XiaoHongShuCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
+                    sleep_sec = config.get_sleep_interval()
+                    await asyncio.sleep(sleep_sec)
+                    utils.logger.info(f"[XiaoHongShuCrawler.search] Sleeping for {sleep_sec:.1f} seconds after page {page-1}")
                 except DataFetchError:
                     utils.logger.error("[XiaoHongShuCrawler.search] Get note detail error")
                     break

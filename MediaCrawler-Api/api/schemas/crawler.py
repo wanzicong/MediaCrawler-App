@@ -82,6 +82,7 @@ class CrawlerStatusResponse(BaseModel):
     started_at: Optional[str] = None
     error_message: Optional[str] = None
     task_id: Optional[int] = None
+    queue_length: int = 0
 
 
 class LogEntry(BaseModel):

@@ -95,10 +95,10 @@ USER_DATA_DIR = "%s_user_data_dir"  # %s will be replaced by platform name
 START_PAGE = 1
 
 # Control the number of crawled videos/posts
-CRAWLER_MAX_NOTES_COUNT = 15
+CRAWLER_MAX_NOTES_COUNT = 100
 
 # Controlling the number of concurrent crawlers
-MAX_CONCURRENCY_NUM = 1
+MAX_CONCURRENCY_NUM = 2
 
 # Whether to enable crawling media mode (including image or video resources), crawling media is not enabled by default
 ENABLE_GET_MEIDAS = False
@@ -107,7 +107,7 @@ ENABLE_GET_MEIDAS = False
 ENABLE_GET_COMMENTS = True
 
 # Control the number of crawled first-level comments (single video/post)
-CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 10
+CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 30
 
 # Whether to enable the mode of crawling second-level comments. By default, crawling of second-level comments is not enabled.
 # If the old version of the project uses db, you need to refer to schema/tables.sql line 287 to add table fields.
@@ -129,8 +129,20 @@ STOP_WORDS_FILE = "./docs/hit_stopwords.txt"
 # Chinese font file path
 FONT_PATH = "./docs/STZHONGS.TTF"
 
-# Crawl interval
-CRAWLER_MAX_SLEEP_SEC = 2
+# Crawl interval (random between MIN and MAX)
+import random
+
+CRAWLER_MAX_SLEEP_SEC = 5
+CRAWLER_MAX_SLEEP_SEC_MAX = 15
+
+
+def get_sleep_interval() -> float:
+    """返回 CRAWLER_MAX_SLEEP_SEC 到 CRAWLER_MAX_SLEEP_SEC_MAX 之间的随机秒数
+    通过延迟导入 config 模块读取运行时动态更新的值"""
+    import config as _cfg
+    _min = _cfg.CRAWLER_MAX_SLEEP_SEC
+    _max = getattr(_cfg, 'CRAWLER_MAX_SLEEP_SEC_MAX', _min * 3)
+    return random.uniform(_min, _max)
 
 # 是否禁用 SSL 证书验证。仅在使用企业代理、Burp Suite、mitmproxy 等会注入自签名证书的中间人代理时设为 True。
 # 警告：禁用 SSL 验证将使所有流量暴露于中间人攻击风险，请勿在生产环境中开启。

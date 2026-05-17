@@ -243,6 +243,22 @@ class ConfigService:
         }
 
     @staticmethod
+    async def update_task_progress(task_id: int, progress: dict) -> None:
+        async with get_mysql_session() as session:
+            task = await session.get(CrawlerTask, task_id)
+            if task:
+                task.progress = progress
+
+    @staticmethod
+    async def delete_task(task_id: int) -> bool:
+        async with get_mysql_session() as session:
+            task = await session.get(CrawlerTask, task_id)
+            if not task:
+                return False
+            await session.delete(task)
+            return True
+
+    @staticmethod
     def apply_payload_sync(payload: dict[str, Any]) -> None:
         apply_crawler_payload(payload)
 
@@ -266,6 +282,7 @@ class ConfigService:
             "status": task.status,
             "payload_snapshot": task.payload_snapshot,
             "error_message": task.error_message,
+            "progress": task.progress,
             "created_at": task.created_at.isoformat() if task.created_at else None,
             "started_at": task.started_at.isoformat() if task.started_at else None,
             "finished_at": task.finished_at.isoformat() if task.finished_at else None,

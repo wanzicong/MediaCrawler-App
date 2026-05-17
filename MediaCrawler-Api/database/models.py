@@ -25,6 +25,7 @@ Base = declarative_base()
 class BilibiliVideo(Base):
     __tablename__ = 'bilibili_video'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     video_id = Column(BigInteger, nullable=False, index=True, unique=True, comment='视频ID')
     video_url = Column(Text, nullable=False, comment='视频URL')
     user_id = Column(BigInteger, index=True, comment='用户ID')
@@ -50,6 +51,7 @@ class BilibiliVideo(Base):
 class BilibiliVideoComment(Base):
     __tablename__ = 'bilibili_video_comment'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     user_id = Column(String(255), comment='用户ID')
     nickname = Column(Text, comment='用户昵称')
     sex = Column(Text, comment='性别')
@@ -57,7 +59,7 @@ class BilibiliVideoComment(Base):
     avatar = Column(Text, comment='头像')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
-    comment_id = Column(BigInteger, index=True, comment='评论ID')
+    comment_id = Column(BigInteger, index=True, unique=True, comment='评论ID')
     video_id = Column(BigInteger, index=True, comment='视频ID')
     content = Column(Text, comment='评论内容')
     create_time = Column(BigInteger, comment='创建时间戳')
@@ -112,6 +114,7 @@ class BilibiliUpDynamic(Base):
 class DouyinAweme(Base):
     __tablename__ = 'douyin_aweme'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     user_id = Column(String(255), comment='用户ID')
     sec_uid = Column(String(255), comment='安全用户ID')
     short_user_id = Column(String(255), comment='短用户ID')
@@ -122,7 +125,7 @@ class DouyinAweme(Base):
     ip_location = Column(Text, comment='IP地址位置')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
-    aweme_id = Column(BigInteger, index=True, comment='作品ID')
+    aweme_id = Column(BigInteger, index=True, unique=True, comment='作品ID')
     aweme_type = Column(Text, comment='作品类型')
     title = Column(Text, comment='作品标题')
     desc = Column(Text, comment='作品描述')
@@ -141,6 +144,7 @@ class DouyinAweme(Base):
 class DouyinAwemeComment(Base):
     __tablename__ = 'douyin_aweme_comment'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     user_id = Column(String(255), comment='用户ID')
     sec_uid = Column(String(255), comment='安全用户ID')
     short_user_id = Column(String(255), comment='短用户ID')
@@ -151,7 +155,7 @@ class DouyinAwemeComment(Base):
     ip_location = Column(Text, comment='IP地址位置')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
-    comment_id = Column(BigInteger, index=True, comment='评论ID')
+    comment_id = Column(BigInteger, index=True, unique=True, comment='评论ID')
     aweme_id = Column(BigInteger, index=True, comment='作品ID')
     content = Column(Text, comment='评论内容')
     create_time = Column(BigInteger, comment='创建时间戳')
@@ -179,12 +183,13 @@ class DyCreator(Base):
 class KuaishouVideo(Base):
     __tablename__ = 'kuaishou_video'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     user_id = Column(String(64), comment='用户ID')
     nickname = Column(Text, comment='用户昵称')
     avatar = Column(Text, comment='用户头像')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
-    video_id = Column(String(255), index=True, comment='视频ID')
+    video_id = Column(String(255), index=True, unique=True, comment='视频ID')
     video_type = Column(Text, comment='视频类型')
     title = Column(Text, comment='视频标题')
     desc = Column(Text, comment='视频描述')
@@ -199,12 +204,13 @@ class KuaishouVideo(Base):
 class KuaishouVideoComment(Base):
     __tablename__ = 'kuaishou_video_comment'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     user_id = Column(Text, comment='用户ID')
     nickname = Column(Text, comment='用户昵称')
     avatar = Column(Text, comment='用户头像')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
-    comment_id = Column(BigInteger, index=True, comment='评论ID')
+    comment_id = Column(BigInteger, index=True, unique=True, comment='评论ID')
     video_id = Column(String(255), index=True, comment='视频ID')
     content = Column(Text, comment='评论内容')
     create_time = Column(BigInteger, comment='创建时间戳')
@@ -213,6 +219,7 @@ class KuaishouVideoComment(Base):
 class WeiboNote(Base):
     __tablename__ = 'weibo_note'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     user_id = Column(String(255), comment='用户ID')
     nickname = Column(Text, comment='用户昵称')
     avatar = Column(Text, comment='用户头像')
@@ -221,7 +228,7 @@ class WeiboNote(Base):
     ip_location = Column(Text, default='', comment='IP地址位置')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
-    note_id = Column(BigInteger, index=True, comment='笔记ID')
+    note_id = Column(BigInteger, index=True, unique=True, comment='笔记ID')
     content = Column(Text, comment='笔记内容')
     create_time = Column(BigInteger, index=True, comment='创建时间戳')
     create_date_time = Column(String(255), index=True, comment='创建日期时间')
@@ -234,6 +241,7 @@ class WeiboNote(Base):
 class WeiboNoteComment(Base):
     __tablename__ = 'weibo_note_comment'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     user_id = Column(String(255), comment='用户ID')
     nickname = Column(Text, comment='用户昵称')
     avatar = Column(Text, comment='用户头像')
@@ -242,7 +250,7 @@ class WeiboNoteComment(Base):
     ip_location = Column(Text, default='', comment='IP地址位置')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
-    comment_id = Column(BigInteger, index=True, comment='评论ID')
+    comment_id = Column(BigInteger, index=True, unique=True, comment='评论ID')
     note_id = Column(BigInteger, index=True, comment='笔记ID')
     content = Column(Text, comment='评论内容')
     create_time = Column(BigInteger, comment='创建时间戳')
@@ -285,13 +293,14 @@ class XhsCreator(Base):
 class XhsNote(Base):
     __tablename__ = 'xhs_note'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     user_id = Column(String(255), comment='用户ID')
     nickname = Column(Text, comment='用户昵称')
     avatar = Column(Text, comment='用户头像')
     ip_location = Column(Text, comment='IP地址位置')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
-    note_id = Column(String(255), index=True, comment='笔记ID')
+    note_id = Column(String(255), index=True, unique=True, comment='笔记ID')
     type = Column(Text, comment='笔记类型')
     title = Column(Text, comment='笔记标题')
     desc = Column(Text, comment='笔记描述')
@@ -311,13 +320,14 @@ class XhsNote(Base):
 class XhsNoteComment(Base):
     __tablename__ = 'xhs_note_comment'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     user_id = Column(String(255), comment='用户ID')
     nickname = Column(Text, comment='用户昵称')
     avatar = Column(Text, comment='用户头像')
     ip_location = Column(Text, comment='IP地址位置')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
-    comment_id = Column(String(255), index=True, comment='评论ID')
+    comment_id = Column(String(255), index=True, unique=True, comment='评论ID')
     create_time = Column(BigInteger, index=True, comment='创建时间戳')
     note_id = Column(String(255), comment='笔记ID')
     content = Column(Text, comment='评论内容')
@@ -329,7 +339,8 @@ class XhsNoteComment(Base):
 class TiebaNote(Base):
     __tablename__ = 'tieba_note'
     id = Column(Integer, primary_key=True, comment='主键ID')
-    note_id = Column(String(644), index=True, comment='笔记ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
+    note_id = Column(String(644), index=True, unique=True, comment='笔记ID')
     title = Column(Text, comment='笔记标题')
     desc = Column(Text, comment='笔记描述')
     note_url = Column(Text, comment='笔记URL')
@@ -350,7 +361,8 @@ class TiebaNote(Base):
 class TiebaComment(Base):
     __tablename__ = 'tieba_comment'
     id = Column(Integer, primary_key=True, comment='主键ID')
-    comment_id = Column(String(255), index=True, comment='评论ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
+    comment_id = Column(String(255), index=True, unique=True, comment='评论ID')
     parent_comment_id = Column(String(255), default='', comment='父评论ID')
     content = Column(Text, comment='评论内容')
     user_link = Column(Text, default='', comment='用户链接')
@@ -385,7 +397,8 @@ class TiebaCreator(Base):
 class ZhihuContent(Base):
     __tablename__ = 'zhihu_content'
     id = Column(Integer, primary_key=True, comment='主键ID')
-    content_id = Column(String(64), index=True, comment='内容ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
+    content_id = Column(String(64), index=True, unique=True, comment='内容ID')
     content_type = Column(Text, comment='内容类型')
     content_text = Column(Text, comment='内容文本')
     content_url = Column(Text, comment='内容URL')
@@ -413,7 +426,8 @@ class ZhihuContent(Base):
 class ZhihuComment(Base):
     __tablename__ = 'zhihu_comment'
     id = Column(Integer, primary_key=True, comment='主键ID')
-    comment_id = Column(String(64), index=True, comment='评论ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
+    comment_id = Column(String(64), index=True, unique=True, comment='评论ID')
     parent_comment_id = Column(String(64), comment='父评论ID')
     content = Column(Text, comment='评论内容')
     publish_time = Column(String(32), index=True, comment='发布时间')

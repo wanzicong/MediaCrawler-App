@@ -10,6 +10,7 @@ import {
   Modal,
   Row,
   Select,
+  Skeleton,
   Space,
   Switch,
   Table,
@@ -178,13 +179,17 @@ export default function SettingsPage() {
         <Typography.Paragraph type="secondary">
           数据存储固定为 MySQL（save_option=db）。敏感项如数据库密码请在服务端 .env 配置。
         </Typography.Paragraph>
-        <Table<CrawlerProfile>
-          rowKey="id"
-          loading={isLoading}
-          columns={columns}
-          dataSource={profiles ?? []}
-          pagination={false}
-        />
+        {isLoading ? (
+          <Skeleton active paragraph={{ rows: 6 }} />
+        ) : (
+          <Table<CrawlerProfile>
+            rowKey="id"
+            columns={columns}
+            dataSource={profiles ?? []}
+            pagination={false}
+            sticky={{ offsetHeader: 0 }}
+          />
+        )}
       </Card>
 
       <Modal
@@ -194,7 +199,7 @@ export default function SettingsPage() {
         onOk={() => saveMutation.mutate()}
         confirmLoading={saveMutation.isPending}
         width={720}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical">
           <Row gutter={16}>
@@ -321,18 +326,23 @@ export default function SettingsPage() {
                         </Form.Item>
                       </Col>
                     </Row>
-                    <Row gutter={16}>
-                      <Col span={8}>
+                    <Row gutter={[16, 8]}>
+                      <Col xs={12} sm={6}>
                         <Form.Item name="crawler_max_notes_count" label="最大条数">
                           <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
-                      <Col span={8}>
-                        <Form.Item name="crawler_max_sleep_sec" label="间隔(秒)">
+                      <Col xs={12} sm={6}>
+                        <Form.Item name="crawler_max_sleep_sec" label="最小间隔(秒)">
                           <InputNumber min={0} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
-                      <Col span={8}>
+                      <Col xs={12} sm={6}>
+                        <Form.Item name="crawler_max_sleep_sec_max" label="最大间隔(秒)">
+                          <InputNumber min={0} style={{ width: '100%' }} />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={12} sm={6}>
                         <Form.Item name="ip_proxy_pool_count" label="代理池">
                           <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>

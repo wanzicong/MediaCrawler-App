@@ -46,6 +46,7 @@ export interface CrawlerStatusResponse {
   started_at?: string | null;
   message?: string | null;
   task_id?: number | null;
+  queue_length?: number;
 }
 
 export interface ApiResponse<T = unknown> {

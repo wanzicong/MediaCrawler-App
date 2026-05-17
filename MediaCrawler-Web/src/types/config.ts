@@ -21,6 +21,7 @@ export interface CrawlerPayload {
   max_concurrency_num: number;
   crawler_max_comments_count_singlenotes: number;
   crawler_max_sleep_sec: number;
+  crawler_max_sleep_sec_max: number;
   enable_get_medias: boolean;
   enable_get_wordcloud: boolean;
   save_login_state: boolean;
@@ -43,6 +44,11 @@ export interface CrawlerTask {
   status: string;
   payload_snapshot: CrawlerPayload;
   error_message?: string | null;
+  progress?: {
+    page?: number;
+    keyword?: string;
+    crawled?: number;
+  } | null;
   created_at?: string;
   started_at?: string;
   finished_at?: string;
@@ -77,6 +83,17 @@ export interface DbQueryResult {
   page_size: number;
 }
 
+export interface TaskDataStats {
+  task_id: number;
+  platforms: Record<string, {
+    label: string;
+    contents: number;
+    comments: number;
+  }>;
+  total_contents: number;
+  total_comments: number;
+}
+
 export const DEFAULT_PAYLOAD: CrawlerPayload = {
   platform: 'xhs',
   login_type: 'qrcode',
@@ -95,10 +112,11 @@ export const DEFAULT_PAYLOAD: CrawlerPayload = {
   enable_ip_proxy: false,
   ip_proxy_pool_count: 2,
   ip_proxy_provider_name: 'kuaidaili',
-  crawler_max_notes_count: 15,
-  max_concurrency_num: 1,
-  crawler_max_comments_count_singlenotes: 10,
-  crawler_max_sleep_sec: 2,
+  crawler_max_notes_count: 100,
+  max_concurrency_num: 2,
+  crawler_max_comments_count_singlenotes: 30,
+  crawler_max_sleep_sec: 5,
+  crawler_max_sleep_sec_max: 15,
   enable_get_medias: false,
   enable_get_wordcloud: false,
   save_login_state: true,

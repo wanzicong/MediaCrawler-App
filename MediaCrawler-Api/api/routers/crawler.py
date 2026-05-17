@@ -28,17 +28,22 @@ router = APIRouter(prefix="/crawler", tags=["crawler"])
 @router.post("/start")
 async def start_crawler(request: CrawlerStartRequest):
     """Start crawler task"""
-    success = await crawler_manager.start(request)
-    if not success:
-        if crawler_manager.process and crawler_manager.process.poll() is None:
-            raise HTTPException(status_code=400, detail="Crawler is already running")
-        raise HTTPException(status_code=500, detail="Failed to start crawler")
-
-    return {
-        "status": "ok",
-        "message": "Crawler started successfully",
-        "task_id": crawler_manager.current_task_id,
-    }
+    result = await crawler_manager.start(request)
+    if result.get("started"):
+        return {
+            "status": "ok",
+            "message": "爬虫已启动",
+            "task_id": result["task_id"],
+        }
+    if result.get("queued"):
+        return {
+            "status": "ok",
+            "message": f"爬虫正忙，任务已加入队列（位置 {result['queue_position']}）",
+            "task_id": result["task_id"],
+            "queued": True,
+            "queue_position": result["queue_position"],
+        }
+    raise HTTPException(status_code=500, detail=result.get("error", "启动失败"))
 
 
 @router.get("/tasks")
@@ -63,17 +68,24 @@ async def get_task_detail(task_id: int):
 
 
 @router.post("/tasks/{task_id}/rerun")
-async def rerun_task(task_id: int):
+async def rerun_task(task_id: int, resume: bool = True):
     from services.config_service import ConfigService
 
     original = await ConfigService.get_task(task_id)
     if not original:
         raise HTTPException(status_code=404, detail="任务不存在")
 
-    if crawler_manager.process and crawler_manager.process.poll() is None:
-        raise HTTPException(status_code=400, detail="爬虫正在运行中，请先停止当前任务")
+    p = dict(original["payload_snapshot"])
+    start_page = p.get("start_page", 1)
 
-    p = original["payload_snapshot"]
+    # 断点续爬：从上次进度恢复
+    if resume and original.get("progress"):
+        progress = original["progress"]
+        if progress.get("page") and progress["page"] > start_page:
+            start_page = progress["page"]
+        if progress.get("keyword"):
+            p["keywords"] = progress["keyword"]
+
     start_request = CrawlerStartRequest(
         profile_id=original.get("profile_id"),
         platform=p["platform"],
@@ -82,23 +94,48 @@ async def rerun_task(task_id: int):
         keywords=p.get("keywords", ""),
         specified_ids=p.get("specified_ids", ""),
         creator_ids=p.get("creator_ids", ""),
-        start_page=p.get("start_page", 1),
+        start_page=start_page,
         enable_comments=p.get("enable_comments", True),
         enable_sub_comments=p.get("enable_sub_comments", False),
         cookies=p.get("cookies", ""),
         headless=p.get("headless", False),
     )
 
-    success = await crawler_manager.start(start_request)
-    if not success:
-        raise HTTPException(status_code=500, detail="启动失败")
+    result = await crawler_manager.start(start_request)
+    if result.get("started"):
+        return {
+            "status": "ok",
+            "message": "任务已重新启动" + (f"（从第 {start_page} 页续爬）" if resume and start_page > 1 else ""),
+            "task_id": result["task_id"],
+            "original_task_id": task_id,
+        }
+    if result.get("queued"):
+        return {
+            "status": "ok",
+            "message": f"爬虫正忙，任务已加入队列（位置 {result['queue_position']}）",
+            "task_id": result["task_id"],
+            "original_task_id": task_id,
+            "queued": True,
+            "queue_position": result["queue_position"],
+        }
+    raise HTTPException(status_code=500, detail=result.get("error", "启动失败"))
 
-    return {
-        "status": "ok",
-        "message": "任务已重新启动",
-        "task_id": crawler_manager.current_task_id,
-        "original_task_id": task_id,
-    }
+
+@router.delete("/tasks/{task_id}")
+async def delete_task(task_id: int):
+    """删除任务记录"""
+    from services.config_service import ConfigService
+
+    task = await ConfigService.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.get("status") == "running":
+        raise HTTPException(status_code=400, detail="无法删除正在运行的任务，请先停止爬虫")
+
+    deleted = await ConfigService.delete_task(task_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return {"status": "ok", "message": "任务已删除"}
 
 
 @router.post("/stop")

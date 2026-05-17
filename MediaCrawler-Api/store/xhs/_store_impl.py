@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import List, Dict, Any
 
 from sqlalchemy import select, update, delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -131,7 +132,11 @@ class XhsDbStoreImplement(AbstractStore):
             if await self.content_is_exist(session, note_id):
                 await self.update_content(session, content_item)
             else:
-                await self.add_content(session, content_item)
+                try:
+                    await self.add_content(session, content_item)
+                except IntegrityError:
+                    await session.rollback()
+                    await self.update_content(session, content_item)
 
     async def add_content(self, session: AsyncSession, content_item: Dict):
         add_ts = int(get_current_timestamp())
@@ -191,7 +196,11 @@ class XhsDbStoreImplement(AbstractStore):
             if await self.comment_is_exist(session, comment_id):
                 await self.update_comment(session, comment_item)
             else:
-                await self.add_comment(session, comment_item)
+                try:
+                    await self.add_comment(session, comment_item)
+                except IntegrityError:
+                    await session.rollback()
+                    await self.update_comment(session, comment_item)
 
     async def add_comment(self, session: AsyncSession, comment_item: Dict):
         add_ts = int(get_current_timestamp())

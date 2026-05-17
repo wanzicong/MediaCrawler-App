@@ -1,4 +1,4 @@
-import { httpGet, httpPost } from '../request';
+import { httpDelete, httpGet, httpPost } from '../request';
 import type { ApiResponse, CrawlerStartPayload, CrawlerStatusResponse } from '@/types/api';
 import type { CrawlerTask, TaskListResponse, TaskRerunResponse } from '@/types/config';
 
@@ -34,6 +34,21 @@ export function stopCrawler() {
   return httpPost<ApiResponse>('/api/crawler/stop');
 }
 
+export function deleteCrawlerTask(taskId: number) {
+  return httpDelete<ApiResponse>(`/api/crawler/tasks/${taskId}`);
+}
+
 export function fetchCrawlerStatus() {
   return httpGet<CrawlerStatusResponse>('/api/crawler/status');
+}
+
+export interface CrawlerLogEntry {
+  id: number;
+  timestamp: string;
+  level: 'info' | 'warning' | 'error' | 'success' | 'debug';
+  message: string;
+}
+
+export function fetchCrawlerLogs(limit = 200) {
+  return httpGet<{ logs: CrawlerLogEntry[] }>(`/api/crawler/logs?limit=${limit}`);
 }

@@ -32,6 +32,7 @@ def build_default_payload() -> dict[str, Any]:
         "max_concurrency_num": config.MAX_CONCURRENCY_NUM,
         "crawler_max_comments_count_singlenotes": config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
         "crawler_max_sleep_sec": config.CRAWLER_MAX_SLEEP_SEC,
+        "crawler_max_sleep_sec_max": getattr(config, "CRAWLER_MAX_SLEEP_SEC_MAX", 15),
         "enable_get_medias": config.ENABLE_GET_MEIDAS,
         "enable_get_wordcloud": config.ENABLE_GET_WORDCLOUD,
         "save_login_state": config.SAVE_LOGIN_STATE,

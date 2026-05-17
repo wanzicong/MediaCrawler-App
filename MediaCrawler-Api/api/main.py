@@ -160,17 +160,8 @@ async def check_environment():
 @app.get("/api/config/platforms")
 async def get_platforms():
     """Get list of supported platforms"""
-    return {
-        "platforms": [
-            {"value": "xhs", "label": "Xiaohongshu", "icon": "book-open"},
-            {"value": "dy", "label": "Douyin", "icon": "music"},
-            {"value": "ks", "label": "Kuaishou", "icon": "video"},
-            {"value": "bili", "label": "Bilibili", "icon": "tv"},
-            {"value": "wb", "label": "Weibo", "icon": "message-circle"},
-            {"value": "tieba", "label": "Baidu Tieba", "icon": "messages-square"},
-            {"value": "zhihu", "label": "Zhihu", "icon": "help-circle"},
-        ]
-    }
+    from services.data_query_service import list_platforms
+    return {"platforms": list_platforms()}
 
 
 @app.get("/api/config/options")
@@ -178,16 +169,16 @@ async def get_config_options():
     """Get all configuration options"""
     return {
         "login_types": [
-            {"value": "qrcode", "label": "QR Code Login"},
-            {"value": "cookie", "label": "Cookie Login"},
+            {"value": "qrcode", "label": "扫码登录"},
+            {"value": "cookie", "label": "Cookie登录"},
         ],
         "crawler_types": [
-            {"value": "search", "label": "Search Mode"},
-            {"value": "detail", "label": "Detail Mode"},
-            {"value": "creator", "label": "Creator Mode"},
+            {"value": "search", "label": "搜索模式"},
+            {"value": "detail", "label": "详情模式"},
+            {"value": "creator", "label": "创作者模式"},
         ],
         "save_options": [
-            {"value": "db", "label": "MySQL Database（默认）"},
+            {"value": "db", "label": "MySQL数据库（默认）"},
         ],
     }
 

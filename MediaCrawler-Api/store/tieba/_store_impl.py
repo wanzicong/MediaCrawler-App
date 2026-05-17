@@ -31,6 +31,7 @@ from typing import Dict
 
 import aiofiles
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import config
@@ -112,10 +113,21 @@ class TieBaDbStoreImplement(AbstractStore):
             if db_note:
                 for key, value in content_item.items():
                     setattr(db_note, key, value)
+                await session.commit()
             else:
                 db_note = TiebaNote(**content_item)
-                session.add(db_note)
-            await session.commit()
+                try:
+                    session.add(db_note)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    stmt = select(TiebaNote).where(TiebaNote.note_id == note_id)
+                    res = await session.execute(stmt)
+                    db_note = res.scalar_one_or_none()
+                    if db_note:
+                        for key, value in content_item.items():
+                            setattr(db_note, key, value)
+                    await session.commit()
 
     async def store_comment(self, comment_item: Dict):
         """
@@ -131,10 +143,21 @@ class TieBaDbStoreImplement(AbstractStore):
             if db_comment:
                 for key, value in comment_item.items():
                     setattr(db_comment, key, value)
+                await session.commit()
             else:
                 db_comment = TiebaComment(**comment_item)
-                session.add(db_comment)
-            await session.commit()
+                try:
+                    session.add(db_comment)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    stmt = select(TiebaComment).where(TiebaComment.comment_id == comment_id)
+                    res = await session.execute(stmt)
+                    db_comment = res.scalar_one_or_none()
+                    if db_comment:
+                        for key, value in comment_item.items():
+                            setattr(db_comment, key, value)
+                    await session.commit()
 
     async def store_creator(self, creator: Dict):
         """

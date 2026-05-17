@@ -31,6 +31,7 @@ from typing import Dict
 
 import aiofiles
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 import config
@@ -142,12 +143,23 @@ class BiliDbStoreImplement(AbstractStore):
                 content_item["add_ts"] = utils.get_current_timestamp()
                 content_item["last_modify_ts"] = utils.get_current_timestamp()
                 new_content = BilibiliVideo(**content_item)
-                session.add(new_content)
+                try:
+                    session.add(new_content)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    result = await session.execute(select(BilibiliVideo).where(BilibiliVideo.video_id == video_id))
+                    video_detail = result.scalar_one_or_none()
+                    if video_detail:
+                        content_item["last_modify_ts"] = utils.get_current_timestamp()
+                        for key, value in content_item.items():
+                            setattr(video_detail, key, value)
+                    await session.commit()
             else:
                 content_item["last_modify_ts"] = utils.get_current_timestamp()
                 for key, value in content_item.items():
                     setattr(video_detail, key, value)
-            await session.commit()
+                await session.commit()
 
     async def store_comment(self, comment_item: Dict):
         """
@@ -171,12 +183,23 @@ class BiliDbStoreImplement(AbstractStore):
                 comment_item["add_ts"] = utils.get_current_timestamp()
                 comment_item["last_modify_ts"] = utils.get_current_timestamp()
                 new_comment = BilibiliVideoComment(**comment_item)
-                session.add(new_comment)
+                try:
+                    session.add(new_comment)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    result = await session.execute(select(BilibiliVideoComment).where(BilibiliVideoComment.comment_id == comment_id))
+                    comment_detail = result.scalar_one_or_none()
+                    if comment_detail:
+                        comment_item["last_modify_ts"] = utils.get_current_timestamp()
+                        for key, value in comment_item.items():
+                            setattr(comment_detail, key, value)
+                    await session.commit()
             else:
                 comment_item["last_modify_ts"] = utils.get_current_timestamp()
                 for key, value in comment_item.items():
                     setattr(comment_detail, key, value)
-            await session.commit()
+                await session.commit()
 
     async def store_creator(self, creator: Dict):
         """

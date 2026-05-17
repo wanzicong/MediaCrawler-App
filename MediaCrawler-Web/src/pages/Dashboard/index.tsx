@@ -1,35 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Card, Col, Row, Space, Statistic, Tag, Typography } from 'antd';
-import {
-  ApiOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  DatabaseOutlined,
-  LoadingOutlined,
-} from '@ant-design/icons';
+import { App, Card, Col, Row, Typography, theme } from 'antd';
 
-import { fetchEnvCheck, fetchHealth } from '@/api';
+import { fetchEnvCheck, fetchHealth, fetchCrawlerTasks } from '@/api';
 import { fetchDatabaseStatus, initDatabase } from '@/api/modules/system';
 import PageHeader from '@/components/PageHeader';
 import { useCrawlerStatus } from '@/hooks/useCrawlerStatus';
 
-const statusColor: Record<string, string> = {
-  idle: 'default',
-  running: 'processing',
-  stopping: 'warning',
-  error: 'error',
-};
-
-const statusLabel: Record<string, string> = {
-  idle: '空闲',
-  running: '运行中',
-  stopping: '停止中',
-  error: '异常',
-};
+import DashboardMetricCards from './components/DashboardMetricCards';
+import DashboardRecentTasks from './components/DashboardRecentTasks';
+import DashboardQuickActions from './components/DashboardQuickActions';
 
 export default function DashboardPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const { token } = theme.useToken();
 
   const { data: health, isLoading: healthLoading } = useQuery({
     queryKey: ['health'],
@@ -49,6 +33,12 @@ export default function DashboardPage() {
 
   const { data: crawlerStatus, isLoading: statusLoading } = useCrawlerStatus(true);
 
+  const { data: recentTasks, isLoading: recentTasksLoading } = useQuery({
+    queryKey: ['crawler-tasks', 1, undefined],
+    queryFn: () => fetchCrawlerTasks({ page: 1, page_size: 5 }),
+    refetchInterval: 15000,
+  });
+
   const initDbMutation = useMutation({
     mutationFn: initDatabase,
     onSuccess: (res) => {
@@ -62,100 +52,50 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="概览"
-        description="系统健康、MySQL 与爬虫运行状态；首次使用请先初始化数据库"
+        description="系统运行状态与快速入口"
       />
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="API 服务"
-              value={healthLoading ? '检测中' : health?.status === 'ok' ? '正常' : '异常'}
-              prefix={
-                healthLoading ? (
-                  <LoadingOutlined />
-                ) : health?.status === 'ok' ? (
-                  <CheckCircleOutlined style={{ color: '#52c41a' }} />
-                ) : (
-                  <CloseCircleOutlined style={{ color: '#ff4d4f' }} />
-                )
-              }
-            />
-          </Card>
+
+      <DashboardMetricCards
+        health={health}
+        healthLoading={healthLoading}
+        dbStatus={dbStatus}
+        dbLoading={dbLoading}
+        refetchDb={refetchDb}
+        envCheck={envCheck}
+        envLoading={envLoading}
+        crawlerStatus={crawlerStatus}
+        statusLoading={statusLoading}
+        initDbMutation={initDbMutation}
+        token={token}
+      />
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={14}>
+          <DashboardRecentTasks
+            tasks={recentTasks?.items ?? []}
+            loading={recentTasksLoading}
+          />
         </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="MySQL"
-              value={
-                dbLoading ? '检测中' : dbStatus?.connected ? '已连接' : '未连接'
-              }
-              prefix={<DatabaseOutlined />}
-            />
-            {dbStatus?.database && (
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {dbStatus.host} / {dbStatus.database}
-              </Typography.Text>
-            )}
-            <Space style={{ marginTop: 12 }}>
-              <Button
-                size="small"
-                type="primary"
-                loading={initDbMutation.isPending}
-                onClick={() => initDbMutation.mutate()}
-              >
-                初始化库表
-              </Button>
-              <Button size="small" onClick={() => refetchDb()}>
-                刷新
-              </Button>
-            </Space>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="爬虫环境"
-              value={envLoading ? '检测中' : envCheck?.success ? '已就绪' : '未就绪'}
-              prefix={<ApiOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="爬虫状态"
-              value={
-                statusLoading
-                  ? '加载中'
-                  : statusLabel[crawlerStatus?.status ?? 'idle'] ?? crawlerStatus?.status
-              }
-            />
-            {!statusLoading && crawlerStatus?.status && (
-              <Space style={{ marginTop: 8 }}>
-                <Tag color={statusColor[crawlerStatus.status]}>
-                  {crawlerStatus.platform?.toUpperCase() || '—'}
-                </Tag>
-                {crawlerStatus.task_id && (
-                  <Tag>任务 #{crawlerStatus.task_id}</Tag>
-                )}
-              </Space>
-            )}
-          </Card>
+        <Col xs={24} lg={10}>
+          <DashboardQuickActions />
         </Col>
       </Row>
+
       {dbStatus && !dbStatus.connected && dbStatus.error && (
-        <Card title="MySQL 连接" style={{ marginTop: 16 }}>
-          <Typography.Paragraph type="danger">{dbStatus.error}</Typography.Paragraph>
+        <Card title="MySQL 连接异常" style={{ marginTop: 16 }}>
+          <Typography.Text type="danger">{dbStatus.error}</Typography.Text>
+          <br />
           <Typography.Text type="secondary">
             请在 MediaCrawler-Api 目录配置 .env（参考 .env.example）并启动 MySQL 服务。
           </Typography.Text>
         </Card>
       )}
+
       {envCheck && !envCheck.success && envCheck.error && (
         <Card title="环境检查详情" style={{ marginTop: 16 }}>
-          <Typography.Paragraph type="danger" copyable>
+          <Typography.Text type="danger" copyable>
             {envCheck.error}
-          </Typography.Paragraph>
+          </Typography.Text>
         </Card>
       )}
     </>

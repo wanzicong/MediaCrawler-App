@@ -29,6 +29,7 @@ import pathlib
 from typing import Dict
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 import config
 from base.base_crawler import AbstractStore
@@ -106,11 +107,23 @@ class DouyinDbStoreImplement(AbstractStore):
                 content_item["add_ts"] = utils.get_current_timestamp()
                 if content_item.get("title"):
                     new_content = DouyinAweme(**content_item)
-                    session.add(new_content)
+                    try:
+                        session.add(new_content)
+                        await session.commit()
+                    except IntegrityError:
+                        await session.rollback()
+                        result = await session.execute(select(DouyinAweme).where(DouyinAweme.aweme_id == aweme_id))
+                        aweme_detail = result.scalar_one_or_none()
+                        if aweme_detail:
+                            for key, value in content_item.items():
+                                setattr(aweme_detail, key, value)
+                        await session.commit()
+                else:
+                    await session.commit()
             else:
                 for key, value in content_item.items():
                     setattr(aweme_detail, key, value)
-            await session.commit()
+                await session.commit()
 
     async def store_comment(self, comment_item: Dict):
         """
@@ -126,11 +139,21 @@ class DouyinDbStoreImplement(AbstractStore):
             if not comment_detail:
                 comment_item["add_ts"] = utils.get_current_timestamp()
                 new_comment = DouyinAwemeComment(**comment_item)
-                session.add(new_comment)
+                try:
+                    session.add(new_comment)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    result = await session.execute(select(DouyinAwemeComment).where(DouyinAwemeComment.comment_id == comment_id))
+                    comment_detail = result.scalar_one_or_none()
+                    if comment_detail:
+                        for key, value in comment_item.items():
+                            setattr(comment_detail, key, value)
+                    await session.commit()
             else:
                 for key, value in comment_item.items():
                     setattr(comment_detail, key, value)
-            await session.commit()
+                await session.commit()
 
     async def store_creator(self, creator: Dict):
         """

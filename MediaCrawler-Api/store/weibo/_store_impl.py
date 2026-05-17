@@ -31,6 +31,7 @@ from typing import Dict
 
 import aiofiles
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import config
@@ -119,12 +120,25 @@ class WeiboDbStoreImplement(AbstractStore):
                 for key, value in content_item.items():
                     if hasattr(db_note, key):
                         setattr(db_note, key, value)
+                await session.commit()
             else:
                 content_item["add_ts"] = utils.get_current_timestamp()
                 content_item["last_modify_ts"] = utils.get_current_timestamp()
                 db_note = WeiboNote(**content_item)
-                session.add(db_note)
-            await session.commit()
+                try:
+                    session.add(db_note)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    stmt = select(WeiboNote).where(WeiboNote.note_id == note_id)
+                    res = await session.execute(stmt)
+                    db_note = res.scalar_one_or_none()
+                    if db_note:
+                        db_note.last_modify_ts = utils.get_current_timestamp()
+                        for key, value in content_item.items():
+                            if hasattr(db_note, key):
+                                setattr(db_note, key, value)
+                    await session.commit()
 
     async def store_comment(self, comment_item: Dict):
         """
@@ -152,12 +166,25 @@ class WeiboDbStoreImplement(AbstractStore):
                 for key, value in comment_item.items():
                     if hasattr(db_comment, key):
                         setattr(db_comment, key, value)
+                await session.commit()
             else:
                 comment_item["add_ts"] = utils.get_current_timestamp()
                 comment_item["last_modify_ts"] = utils.get_current_timestamp()
                 db_comment = WeiboNoteComment(**comment_item)
-                session.add(db_comment)
-            await session.commit()
+                try:
+                    session.add(db_comment)
+                    await session.commit()
+                except IntegrityError:
+                    await session.rollback()
+                    stmt = select(WeiboNoteComment).where(WeiboNoteComment.comment_id == comment_id)
+                    res = await session.execute(stmt)
+                    db_comment = res.scalar_one_or_none()
+                    if db_comment:
+                        db_comment.last_modify_ts = utils.get_current_timestamp()
+                        for key, value in comment_item.items():
+                            if hasattr(db_comment, key):
+                                setattr(db_comment, key, value)
+                    await session.commit()
 
     async def store_creator(self, creator: Dict):
         """

@@ -36,6 +36,7 @@ class CrawlerTask(Base):
     )
     payload_snapshot = Column(JSON, nullable=False, comment="启动时配置快照")
     error_message = Column(Text, nullable=True)
+    progress = Column(JSON, nullable=True, comment="爬取进度快照 {page, keyword, crawled_count}")
     created_at = Column(DateTime, default=datetime.utcnow)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)

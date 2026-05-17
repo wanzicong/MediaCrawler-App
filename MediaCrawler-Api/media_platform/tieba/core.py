@@ -39,6 +39,7 @@ from store import tieba as tieba_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
 from var import crawler_type_var, source_keyword_var
+from services.progress_reporter import get_progress_reporter
 
 from .client import BaiduTieBaClient
 from .field import SearchNoteType, SearchSortType
@@ -197,8 +198,9 @@ class TieBaCrawler(AbstractCrawler):
                     )
 
                     # Sleep after page navigation
-                    await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-                    utils.logger.info(f"[TieBaCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page}")
+                    sleep_sec = config.get_sleep_interval()
+                    await asyncio.sleep(sleep_sec)
+                    utils.logger.info(f"[TieBaCrawler.search] Sleeping for {sleep_sec:.1f} seconds after page {page}")
 
                     page += 1
                 except Exception as ex:
@@ -269,6 +271,10 @@ class TieBaCrawler(AbstractCrawler):
                 note_details_model.append(note_detail)
                 await tieba_store.update_tieba_note(note_detail)
         await self.batch_get_note_comments(note_details_model)
+
+        reporter = get_progress_reporter()
+        if reporter:
+            await reporter.report(keyword=source_keyword_var.get())
 
     async def get_note_detail_async_task(
         self, note_id: str, semaphore: asyncio.Semaphore
