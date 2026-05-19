@@ -28,7 +28,7 @@ export default function MetricCard({
   return (
     <Card
       className={onClick ? `${styles.card} ${styles.clickable}` : styles.card}
-      style={{ borderLeft: `3px solid ${color}` }}
+      style={{ borderLeft: '3px solid var(--brand-primary)' }}
       onClick={onClick}
       hoverable
     >
@@ -38,7 +38,7 @@ export default function MetricCard({
         <>
           <div className={styles.header}>
             <span className={styles.title}>{title}</span>
-            <span className={styles.iconCircle} style={{ background: colorToRgba(color, 0.08), color }}>
+            <span className={styles.iconCircle} style={{ background: 'rgba(217, 119, 87, 0.12)', color: 'var(--brand-primary)' }}>
               {icon}
             </span>
           </div>
