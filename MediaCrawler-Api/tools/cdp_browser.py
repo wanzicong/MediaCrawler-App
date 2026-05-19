@@ -147,6 +147,9 @@ class CDPBrowserManager:
         Connect to an existing browser that already has remote debugging enabled.
         User needs to enable remote debugging via chrome://inspect/#remote-debugging
         or launch Chrome with --remote-debugging-port flag.
+
+        If no existing browser is found within a short grace period, auto-fallback
+        to launching a new browser so the crawler doesn't stall unnecessarily.
         """
         self.debug_port = config.CDP_DEBUG_PORT
         utils.logger.info(
@@ -157,31 +160,29 @@ class CDPBrowserManager:
             "chrome://inspect/#remote-debugging"
         )
 
-        # Wait for the browser's CDP port to become available
-        # The user may need time to enable remote debugging or confirm the connection dialog
-        timeout = config.BROWSER_LAUNCH_TIMEOUT
+        # Quick-check: give the existing browser a short grace period (~10s)
+        # to be reachable. If it's not there, auto-fallback to launching a new browser
+        # instead of waiting the full BROWSER_LAUNCH_TIMEOUT and stalling.
+        quick_timeout = min(config.BROWSER_LAUNCH_TIMEOUT, 10)
         utils.logger.info(
-            f"[CDPBrowserManager] Waiting up to {timeout}s for browser CDP connection..."
+            f"[CDPBrowserManager] Quick-checking existing browser (up to {quick_timeout}s) ..."
         )
         connected = False
-        for i in range(timeout):
+        for i in range(quick_timeout):
             if await self._test_cdp_connection(self.debug_port):
                 connected = True
                 break
-            if i % 5 == 0 and i > 0:
-                utils.logger.info(
-                    f"[CDPBrowserManager] Still waiting for browser... ({i}s elapsed) "
-                    "Please enable remote debugging: chrome://inspect/#remote-debugging"
-                )
             await asyncio.sleep(1)
 
         if not connected:
-            raise RuntimeError(
-                f"Cannot connect to existing browser on port {self.debug_port} "
-                f"after waiting {timeout}s. Please ensure:\n"
-                "  1. Your browser is running\n"
-                "  2. Remote debugging is enabled (chrome://inspect/#remote-debugging)\n"
-                f"  3. The debug port is {self.debug_port} (configure via CDP_DEBUG_PORT)"
+            utils.logger.warning(
+                f"[CDPBrowserManager] No existing browser found on port {self.debug_port} "
+                f"after {quick_timeout}s — auto-fallback: launching a new browser instead. "
+                "Set CDP_CONNECT_EXISTING=False in config to skip the quick-check entirely."
+            )
+            # Fallback: launch a new browser
+            return await self._launch_new_browser_and_connect(
+                playwright, playwright_proxy, user_agent
             )
 
         # Connect via CDP (reuse existing method)
@@ -192,6 +193,22 @@ class CDPBrowserManager:
         self.browser_context = browser_context
 
         utils.logger.info("[CDPBrowserManager] Successfully connected to existing browser")
+        return browser_context
+
+    async def _launch_new_browser_and_connect(
+        self,
+        playwright: Playwright,
+        playwright_proxy: Optional[Dict] = None,
+        user_agent: Optional[str] = None,
+    ) -> BrowserContext:
+        """Launch a new browser and connect via CDP (extracted for reuse in fallback)."""
+        browser_path = await self._get_browser_path()
+        self.debug_port = self.launcher.find_available_port(config.CDP_DEBUG_PORT)
+        await self._launch_browser(browser_path, headless=config.CDP_HEADLESS)
+        self._register_cleanup_handlers()
+        await self._connect_via_cdp(playwright)
+        browser_context = await self._create_browser_context(playwright_proxy, user_agent)
+        self.browser_context = browser_context
         return browser_context
 
     async def _get_browser_path(self) -> str:

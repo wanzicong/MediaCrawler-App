@@ -174,7 +174,6 @@ export default function CrawlerTaskTable({
         columns={columns}
         dataSource={dataSource}
         loading={loading}
-        sticky={{ offsetHeader: 0 }}
         rowClassName={(_: unknown, r: CrawlerTask) => {
           if (r.status === 'failed') return 'row-failed';
           if (r.status === 'running') return 'row-running';

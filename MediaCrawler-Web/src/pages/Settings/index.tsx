@@ -187,7 +187,6 @@ export default function SettingsPage() {
             columns={columns}
             dataSource={profiles ?? []}
             pagination={false}
-            sticky={{ offsetHeader: 0 }}
           />
         )}
       </Card>

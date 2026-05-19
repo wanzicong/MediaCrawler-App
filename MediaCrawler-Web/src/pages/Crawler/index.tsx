@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
   Alert,
@@ -10,7 +10,7 @@ import {
   Tag,
 } from 'antd';
 import { StopOutlined } from '@ant-design/icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -72,6 +72,7 @@ export default function CrawlerPage() {
     queryKey: ['crawler-tasks', historyPage, historyStatus],
     queryFn: () =>
       fetchCrawlerTasks({ page: historyPage, page_size: 20, status: historyStatus }),
+    placeholderData: keepPreviousData,
     refetchInterval: activeTab === 'history' ? 10000 : false,
   });
 
@@ -166,6 +167,18 @@ export default function CrawlerPage() {
     startMutation.mutate(values);
   };
 
+  const handleRowClick = useCallback((task: CrawlerTask) => {
+    setDetailTask(task);
+    setDetailOpen(true);
+  }, []);
+
+  const handleRerun = useCallback((id: number) => rerunMutation.mutate(id), [rerunMutation.mutate]);
+
+  const handleRefresh = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ['crawler-tasks'] }),
+    [queryClient],
+  );
+
   const handleDelete = (taskId: number) => {
     modal.confirm({
       title: '确认删除',
@@ -245,15 +258,10 @@ export default function CrawlerPage() {
                 rerunPending={rerunMutation.isPending}
                 onStatusChange={setHistoryStatus}
                 onPageChange={setHistoryPage}
-                onRowClick={(task) => {
-                  setDetailTask(task);
-                  setDetailOpen(true);
-                }}
-                onRerun={(id) => rerunMutation.mutate(id)}
+                onRowClick={handleRowClick}
+                onRerun={handleRerun}
                 onDelete={handleDelete}
-                onRefresh={() =>
-                  queryClient.invalidateQueries({ queryKey: ['crawler-tasks'] })
-                }
+                onRefresh={handleRefresh}
               />
             ),
           },
