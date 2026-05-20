@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import json
 import re
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
@@ -9,6 +10,7 @@ from sqlalchemy import select, delete
 
 from database.db_session import get_mysql_session
 from database.system_models import ChatSession, ChatMemory
+from services.data_query_service import DataQueryService, PLATFORM_META
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -340,3 +342,201 @@ async def get_messages(session_id: int):
         if not s:
             raise HTTPException(404, "会话不存在")
         return {"session_id": session_id, "messages": s.messages or []}
+
+
+# ── Analyze Comments Pydantic Models ──────────────────────────────
+
+class SentimentAnalysis(BaseModel):
+    positive: float
+    neutral: float
+    negative: float
+    summary: str
+
+
+class KeyInsight(BaseModel):
+    point: str
+    representative_comment: str
+
+
+class AnalyzeRequest(BaseModel):
+    platform: str
+    content_id: str
+
+
+class AnalyzeResponse(BaseModel):
+    platform: str
+    content_id: str
+    comment_count: int
+    sentiment: SentimentAnalysis
+    key_insights: list[KeyInsight]
+    summary: str
+    hot_topics: list[str]
+
+
+# ── Analyze Comments ──────────────────────────────────────────────
+
+_MAX_COMMENTS = 500
+_PAGE_SIZE = 100
+
+
+@router.post("/analyze-comments", response_model=AnalyzeResponse)
+async def analyze_comments(req: AnalyzeRequest):
+    # ── 阶段 1: 校验平台 ─────────────────────────────────────────
+    if req.platform not in PLATFORM_META:
+        raise HTTPException(400, f"不支持的平台: {req.platform}")
+
+    # ── 阶段 2: 分页拉取评论（每页 100 条，最多 5 页）──────────
+    all_comments: list[str] = []
+    total_count = 0
+    truncated = False
+
+    for page in range(1, 6):  # 最多 5 页，每页 100 条 = 最多 500 条
+        result = await DataQueryService.query_comments_by_content(
+            platform=req.platform,
+            content_id=req.content_id,
+            page=page,
+            page_size=_PAGE_SIZE,
+        )
+        items = result.get("items", [])
+        total_count = result.get("total", 0)
+
+        for item in items:
+            comment_text = item.get("content", "") if item.get("content") else ""
+            if comment_text and isinstance(comment_text, str):
+                comment_text = comment_text.strip()
+                if comment_text:
+                    all_comments.append(comment_text)
+
+        if len(items) < _PAGE_SIZE:
+            break
+
+    # 检查实际拉取数量是否超过 500
+    if len(all_comments) >= _MAX_COMMENTS:
+        all_comments = all_comments[:_MAX_COMMENTS]
+        truncated = True
+
+    # ── 阶段 3: 无评论时返回空分析 ──────────────────────────────
+    comment_count = len(all_comments)
+    if comment_count == 0:
+        return AnalyzeResponse(
+            platform=req.platform,
+            content_id=req.content_id,
+            comment_count=0,
+            sentiment=SentimentAnalysis(
+                positive=0,
+                neutral=0,
+                negative=0,
+                summary="该内容暂无评论数据",
+            ),
+            key_insights=[],
+            summary="该内容下没有评论，无法进行分析",
+            hot_topics=[],
+        )
+
+    # ── 阶段 4: 构建 Prompt ──────────────────────────────────────
+    truncated_notice = ""
+    if truncated:
+        truncated_notice = f"（注意：原始评论超过{_MAX_COMMENTS}条，此处仅展示了前{_MAX_COMMENTS}条）\n"
+
+    comments_text = "\n".join(
+        f"{i+1}. {c}" for i, c in enumerate(all_comments)
+    )
+
+    prompt = f"""请分析以下{comment_count}条用户评论，返回严格的JSON格式分析结果。
+
+{truncated_notice}评论列表：
+{comments_text}
+
+要求返回以下JSON结构（只返回JSON，不要markdown代码块，不要任何额外文字）：
+{{
+    "sentiment": {{
+        "positive": 正面评论百分比(整数),
+        "neutral": 中性评论百分比(整数),
+        "negative": 负面评论百分比(整数),
+        "summary": "情感分析小结，用中文"
+    }},
+    "key_insights": [
+        {{"point": "核心观点概述", "representative_comment": "代表性评论原文"}}
+    ],
+    "summary": "综合总结，包括评论数量、整体情感倾向、主要讨论话题等",
+    "hot_topics": ["热门话题1", "热门话题2", ...]
+}}
+
+注意：positive + neutral + negative 三者之和必须等于 100。"""
+
+    # ── 阶段 5: 调用 DeepSeek API ────────────────────────────────
+    api_key = _get_api_key()
+    if not api_key:
+        raise HTTPException(500, "未配置 DEEPSEEK_API_KEY")
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        try:
+            resp = await client.post(
+                f"{DEEPSEEK_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            ai_text = data["choices"][0]["message"]["content"]
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(e.response.status_code, f"DeepSeek API 错误: {e.response.text}")
+        except Exception as e:
+            raise HTTPException(500, f"请求失败: {str(e)}")
+
+    # ── 阶段 6: 解析 JSON ────────────────────────────────────────
+    parsed: dict = {}
+    raw_text = ai_text.strip()
+    # 尝试去掉可能的 markdown 代码块包裹
+    if raw_text.startswith("```"):
+        lines = raw_text.split("\n")
+        # 去掉第一行和最后一行 ``` 标记
+        if len(lines) >= 3:
+            lines = lines[1:]  # 去掉 ```json 或 ```
+            if lines[-1].strip() == "```":
+                lines = lines[:-1]
+            raw_text = "\n".join(lines)
+
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        raise HTTPException(500, f"AI 返回内容无法解析为 JSON: {ai_text[:500]}")
+    except Exception as e:
+        raise HTTPException(500, f"解析 AI 返回结果时出错: {str(e)}")
+
+    # ── 阶段 7: 构造响应 ─────────────────────────────────────────
+    sentiment_data = parsed.get("sentiment", {})
+    key_insights_data = parsed.get("key_insights", [])
+    summary_text = parsed.get("summary", "")
+    hot_topics_data = parsed.get("hot_topics", [])
+
+    # 如果评论被截断，在总结中注明
+    if truncated:
+        summary_text = f"（注意：原始评论超过{_MAX_COMMENTS}条，仅分析了前{_MAX_COMMENTS}条）{summary_text}"
+
+    return AnalyzeResponse(
+        platform=req.platform,
+        content_id=req.content_id,
+        comment_count=comment_count,
+        sentiment=SentimentAnalysis(
+            positive=round(sentiment_data.get("positive", 0)),
+            neutral=round(sentiment_data.get("neutral", 0)),
+            negative=round(sentiment_data.get("negative", 0)),
+            summary=sentiment_data.get("summary", ""),
+        ),
+        key_insights=[
+            KeyInsight(
+                point=k.get("point", ""),
+                representative_comment=k.get("representative_comment", ""),
+            )
+            for k in key_insights_data
+        ],
+        summary=summary_text,
+        hot_topics=hot_topics_data,
+    )

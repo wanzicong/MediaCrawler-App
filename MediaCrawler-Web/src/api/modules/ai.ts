@@ -76,3 +76,34 @@ export function createMemory(key: string, content: string, category?: string) {
 export function deleteMemory(id: number) {
   return httpDelete(`/api/ai/memories/${id}`);
 }
+
+export interface AnalyzeRequest {
+  platform: string;
+  content_id: string;
+}
+
+export interface SentimentResult {
+  positive: number;
+  neutral: number;
+  negative: number;
+  summary: string;
+}
+
+export interface KeyInsight {
+  point: string;
+  representative_comment: string;
+}
+
+export interface AnalyzeResponse {
+  platform: string;
+  content_id: string;
+  comment_count: number;
+  sentiment: SentimentResult;
+  key_insights: KeyInsight[];
+  summary: string;
+  hot_topics: string[];
+}
+
+export function analyzeComments(data: AnalyzeRequest, signal?: AbortSignal) {
+  return httpPost<AnalyzeResponse>('/api/ai/analyze-comments', data, { signal });
+}

@@ -54,6 +54,7 @@ Thumbs.db
 browser_data/
 cache/
 data/
+!MediaCrawler-Web/src/pages/Data/
 temp_image/
 *.db
 # 错误创建的系统目录
