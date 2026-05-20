@@ -5,4 +5,5 @@ export * from './modules/system';
 export * from './modules/crawler';
 export * from './modules/data';
 export * from './modules/dataDb';
+export * from './modules/ai';
 export { default as request } from './request';

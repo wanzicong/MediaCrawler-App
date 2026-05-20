@@ -8,6 +8,7 @@ const DashboardPage = lazy(() => import('@/pages/Dashboard'));
 const SettingsPage = lazy(() => import('@/pages/Settings'));
 const CrawlerPage = lazy(() => import('@/pages/Crawler'));
 const DataPage = lazy(() => import('@/pages/Data'));
+const AiChatPage = lazy(() => import('@/pages/AiChat'));
 const NotFoundPage = lazy(() => import('@/pages/NotFound'));
 
 function PageLoader() {
@@ -43,6 +44,10 @@ export const router = createBrowserRouter([
       {
         path: 'data',
         element: withSuspense(<DataPage />),
+      },
+      {
+        path: 'ai-chat',
+        element: withSuspense(<AiChatPage />),
       },
     ],
   },

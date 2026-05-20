@@ -40,3 +40,28 @@ class CrawlerTask(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
+
+
+class ChatSession(Base):
+    """AI 对话会话"""
+
+    __tablename__ = "chat_session"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(128), nullable=False, default="新对话", comment="会话标题")
+    messages = Column(JSON, nullable=False, default=list, comment="消息列表 [{role, content, timestamp}]")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ChatMemory(Base):
+    """AI 记忆条目"""
+
+    __tablename__ = "chat_memory"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key = Column(String(128), nullable=False, unique=True, comment="记忆标识")
+    content = Column(Text, nullable=False, comment="记忆内容")
+    category = Column(String(64), default="通用", comment="分类标签")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

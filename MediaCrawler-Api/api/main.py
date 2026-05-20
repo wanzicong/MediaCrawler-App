@@ -40,6 +40,7 @@ from .routers import (
     data_router,
     system_router,
     websocket_router,
+    ai_router,
 )
 
 load_dotenv()
@@ -87,6 +88,7 @@ app.include_router(system_router, prefix="/api")
 app.include_router(data_db_router, prefix="/api")
 app.include_router(data_router, prefix="/api")
 app.include_router(websocket_router, prefix="/api")
+app.include_router(ai_router, prefix="/api")
 
 
 @app.get("/")

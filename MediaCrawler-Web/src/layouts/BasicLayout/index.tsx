@@ -8,6 +8,7 @@ import {
   MenuOutlined,
   NodeIndexOutlined,
   RocketOutlined,
+  RobotOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
@@ -26,6 +27,7 @@ const menuItems = [
   { key: '/settings', icon: <SettingOutlined />, label: '配置方案' },
   { key: '/crawler', icon: <RocketOutlined />, label: '爬虫任务' },
   { key: '/data', icon: <DatabaseOutlined />, label: '数据中心' },
+  { key: '/ai-chat', icon: <RobotOutlined />, label: 'AI 对话' },
 ];
 
 const breadcrumbMap: Record<string, string> = {
@@ -33,6 +35,7 @@ const breadcrumbMap: Record<string, string> = {
   '/settings': '配置方案',
   '/crawler': '爬虫任务',
   '/data': '数据中心',
+  '/ai-chat': 'AI 对话',
 };
 
 const titleMap: Record<string, string> = {
@@ -40,6 +43,7 @@ const titleMap: Record<string, string> = {
   '/settings': `配置方案 | ${APP_TITLE}`,
   '/crawler': `爬虫任务 | ${APP_TITLE}`,
   '/data': `数据中心 | ${APP_TITLE}`,
+  '/ai-chat': `AI 对话 | ${APP_TITLE}`,
 };
 
 export default function BasicLayout() {
