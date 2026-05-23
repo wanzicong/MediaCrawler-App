@@ -41,9 +41,9 @@ export function useCrawlerLogs(enabled: boolean): UseCrawlerLogsReturn {
       })
       .catch(() => {});
 
-    // Build WS URL from current location
+    // Build WS URL from current location (goes through Vite proxy in dev, direct in prod)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.hostname}:8088/api/ws/logs`;
+    const wsUrl = `${protocol}//${window.location.host}/api/ws/logs`;
 
     const connect = () => {
       if (!mountedRef.current) return;

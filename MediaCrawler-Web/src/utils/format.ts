@@ -3,7 +3,7 @@ import type { CrawlerTask } from '@/types/config';
 import { TS_FIELDS } from '@/constants/fields';
 
 export function isImageUrl(s: string): boolean {
-  return s.startsWith('http://') || s.startsWith('https://');
+  return s.startsWith('http://') || s.startsWith('https://') || s.startsWith('//');
 }
 
 export function formatText(key: string, v: unknown): string {
@@ -25,11 +25,11 @@ export function formatText(key: string, v: unknown): string {
 
 export function calcDuration(task: CrawlerTask): string {
   if (!task.started_at) return '—';
-  const start = dayjs(task.started_at);
+  const start = dayjs.utc(task.started_at);
   const end = task.finished_at
-    ? dayjs(task.finished_at)
+    ? dayjs.utc(task.finished_at)
     : task.status === 'running'
-      ? dayjs()
+      ? dayjs.utc()
       : null;
   if (!end) return '进行中';
   const sec = end.diff(start, 'second');

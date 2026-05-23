@@ -10,7 +10,7 @@ import {
   Tabs,
   Tag,
 } from 'antd';
-import { StopOutlined } from '@ant-design/icons';
+import { ClearOutlined, StopOutlined } from '@ant-design/icons';
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -24,6 +24,7 @@ import {
   deleteCrawlerTask,
   fetchTaskDataStats,
 } from '@/api';
+import request from '@/api/request';
 import { fetchProfiles } from '@/api/modules/configMgmt';
 import PageHeader from '@/components/PageHeader';
 import { useCrawlerStatus } from '@/hooks/useCrawlerStatus';
@@ -111,6 +112,17 @@ export default function CrawlerPage() {
       message.success('任务已删除');
       setDetailOpen(false);
       void queryClient.invalidateQueries({ queryKey: ['crawler-tasks'] });
+    },
+  });
+
+  const cleanupMutation = useMutation({
+    mutationFn: () => request.post('/api/crawler/cleanup-zombies'),
+    onSuccess: (res) => {
+      const data = res.data as { killed_processes?: string[]; freed_ports?: number[] };
+      const procs = data.killed_processes?.join(', ') || '无';
+      const ports = data.freed_ports?.join(', ') || '无';
+      message.success(`清理完成 — 进程: ${procs} | 端口: ${ports}`);
+      void queryClient.invalidateQueries({ queryKey: ['crawler', 'status'] });
     },
   });
 
@@ -210,6 +222,22 @@ export default function CrawlerPage() {
               onClick={() => stopMutation.mutate()}
             >
               停止
+            </Button>
+            <Button
+              icon={<ClearOutlined />}
+              loading={cleanupMutation.isPending}
+              onClick={() => {
+                modal.confirm({
+                  title: '强制清理僵尸进程',
+                  content: '将强制终止所有 Edge/Chrome 浏览器进程并释放调试端口。确定继续？',
+                  okText: '确认清理',
+                  okType: 'danger',
+                  cancelText: '取消',
+                  onOk: () => cleanupMutation.mutate(),
+                });
+              }}
+            >
+              强制清理
             </Button>
           </Space>
         }

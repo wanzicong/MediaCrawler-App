@@ -65,13 +65,27 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         self.cookie_dict = cookie_dict
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
+        # Persistent httpx client — reuse TCP connections to avoid triggering rate limits
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Get or create a persistent httpx client. Recreates if proxy changed."""
+        if self._client is None or self._client.is_closed:
+            self._client = make_async_client(proxy=self.proxy)
+        return self._client
+
+    async def close_client(self):
+        """Close the persistent client."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     async def request(self, method, url, **kwargs) -> Any:
         # Check if proxy has expired before each request
         await self._refresh_proxy_if_expired()
 
-        async with make_async_client(proxy=self.proxy) as client:
-            response = await client.request(method, url, timeout=self.timeout, **kwargs)
+        client = self._get_client()
+        response = await client.request(method, url, timeout=self.timeout, **kwargs)
         try:
             data: Dict = response.json()
         except json.JSONDecodeError:
@@ -281,20 +295,23 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         max_retries = 3
         while not is_end and len(result) < max_count:
             comments_res = None
+            last_error = None
             for attempt in range(max_retries):
                 try:
                     comments_res = await self.get_video_comments(video_id, CommentOrderType.DEFAULT, next_page)
                     break  # Success
                 except DataFetchError as e:
+                    last_error = e
                     if attempt < max_retries - 1:
                         delay = 5 * (2**attempt) + random.uniform(0, 1)
                         utils.logger.warning(f"[BilibiliClient.get_video_all_comments] Retrying video_id {video_id} in {delay:.2f}s... (Attempt {attempt + 1}/{max_retries})")
                         await asyncio.sleep(delay)
                     else:
-                        utils.logger.error(f"[BilibiliClient.get_video_all_comments] Max retries reached for video_id: {video_id}. Skipping comments. Error: {e}")
-                        is_end = True
-                        break
+                        utils.logger.error(f"[BilibiliClient.get_video_all_comments] Max retries reached for video_id: {video_id}. Error: {e}")
             if not comments_res:
+                # Re-raise so the caller knows comments failed
+                if last_error:
+                    raise last_error
                 break
 
             cursor_info: Dict = comments_res.get("cursor")

@@ -9,7 +9,7 @@ export const IMPORTANT_FIELDS: Record<string, string[]> = {
   // 视频列表：头像、昵称、标题、视频封面
   'dy.contents': ['avatar', 'nickname', 'title', 'cover_url'],
   'ks.contents': ['avatar', 'nickname', 'title', 'video_cover_url'],
-  'bili.contents': ['avatar', 'nickname', 'title', 'video_cover_url'],
+  'bili.contents': ['avatar', 'nickname', 'title', 'video_cover_url', 'video_url', 'video_play_count', 'video_comment', 'liked_count'],
 
   // 评论：头像、昵称、内容、创建时间
   'xhs.comments': ['avatar', 'nickname', 'content', 'create_time'],

@@ -105,6 +105,10 @@ class TieBaCrawler(AbstractCrawler):
             # Inject anti-detection scripts - for Baidu's special detection
             await self._inject_anti_detection_scripts()
 
+            # Close blank default pages from browser startup
+            for _p in self.browser_context.pages:
+                await _p.close()
+
             self.context_page = await self.browser_context.new_page()
 
             # First visit Baidu homepage, then click Tieba link to avoid triggering security verification

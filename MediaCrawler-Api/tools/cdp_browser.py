@@ -291,7 +291,12 @@ class CDPBrowserManager:
         if not self.launcher.wait_for_browser_ready(
             self.debug_port, config.BROWSER_LAUNCH_TIMEOUT
         ):
-            raise RuntimeError(f"Browser failed to start within {config.BROWSER_LAUNCH_TIMEOUT} seconds")
+            # Kill the browser process if it failed to become ready
+            self.launcher.cleanup()
+            raise RuntimeError(
+                f"浏览器在 {config.BROWSER_LAUNCH_TIMEOUT} 秒内未能就绪 (端口 {self.debug_port})。"
+                f"已自动清理浏览器进程。请稍后重试或使用「强制清理」按钮。"
+            )
 
         # Extra wait for CDP service to fully start
         await asyncio.sleep(1)

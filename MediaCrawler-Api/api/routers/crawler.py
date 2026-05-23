@@ -161,3 +161,77 @@ async def get_logs(limit: int = 100):
     """Get recent logs"""
     logs = crawler_manager.logs[-limit:] if limit > 0 else crawler_manager.logs
     return {"logs": [log.model_dump() for log in logs]}
+
+
+@router.post("/cleanup-zombies")
+async def cleanup_zombie_processes():
+    """强制清理僵尸浏览器进程和端口占用"""
+    import os
+    import subprocess
+    import sys
+
+    killed_processes = []
+    freed_ports = []
+
+    # Windows: kill Edge/Chrome processes and check debug ports
+    if sys.platform == "win32":
+        # 1. Kill stuck msedge/chrome processes
+        for proc_name in ["msedge.exe", "chrome.exe"]:
+            try:
+                result = subprocess.run(
+                    ["taskkill", "/F", "/IM", proc_name],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    killed_processes.append(proc_name)
+            except Exception:
+                pass
+
+        # 2. Free debug ports 9222-9230
+        for port in range(9222, 9230):
+            try:
+                result = subprocess.run(
+                    ["netstat", "-ano"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                for line in result.stdout.splitlines():
+                    if f"127.0.0.1:{port}" in line and "LISTENING" in line:
+                        parts = line.strip().split()
+                        pid = parts[-1]
+                        subprocess.run(
+                            ["taskkill", "/F", "/PID", pid],
+                            capture_output=True, timeout=5,
+                        )
+                        freed_ports.append(port)
+            except Exception:
+                pass
+
+    # Linux/Mac: kill chrome/edge processes
+    else:
+        for proc_name in ["chromium", "chrome", "edge", "msedge"]:
+            try:
+                result = subprocess.run(
+                    ["pkill", "-9", "-f", proc_name],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    killed_processes.append(proc_name)
+            except Exception:
+                pass
+
+    # Also clean up any orphaned Python subprocess with --task-id
+    try:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["wmic", "process", "where", "commandline like '%--task-id%'", "delete"],
+                capture_output=True, timeout=10,
+            )
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "message": "僵尸进程清理完成",
+        "killed_processes": killed_processes,
+        "freed_ports": freed_ports,
+    }

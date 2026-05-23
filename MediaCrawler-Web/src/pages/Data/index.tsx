@@ -130,7 +130,7 @@ export default function DataPage() {
     setAnalyzingContentId(contentId);
     setAnalysisLoading(true);
     try {
-      const result = await analyzeComments({ platform, content_id: contentId }, controller.signal);
+      const result = await analyzeComments({ platform, content_id: String(contentId) }, controller.signal);
       if (!controller.signal.aborted) {
         setAnalysisResult(result);
       }

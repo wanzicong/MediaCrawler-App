@@ -4,6 +4,7 @@ import json
 import re
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
+from typing import Any
 from pydantic import BaseModel
 import httpx
 from sqlalchemy import select, delete
@@ -360,7 +361,7 @@ class KeyInsight(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     platform: str
-    content_id: str
+    content_id: Any  # 接受 int/str，端点内统一转 str
 
 
 class AnalyzeResponse(BaseModel):
@@ -381,6 +382,8 @@ _PAGE_SIZE = 100
 
 @router.post("/analyze-comments", response_model=AnalyzeResponse)
 async def analyze_comments(req: AnalyzeRequest):
+    content_id: str = str(req.content_id)
+
     # ── 阶段 1: 校验平台 ─────────────────────────────────────────
     if req.platform not in PLATFORM_META:
         raise HTTPException(400, f"不支持的平台: {req.platform}")
@@ -393,7 +396,7 @@ async def analyze_comments(req: AnalyzeRequest):
     for page in range(1, 6):  # 最多 5 页，每页 100 条 = 最多 500 条
         result = await DataQueryService.query_comments_by_content(
             platform=req.platform,
-            content_id=req.content_id,
+            content_id=content_id,
             page=page,
             page_size=_PAGE_SIZE,
         )
@@ -420,7 +423,7 @@ async def analyze_comments(req: AnalyzeRequest):
     if comment_count == 0:
         return AnalyzeResponse(
             platform=req.platform,
-            content_id=req.content_id,
+            content_id=content_id,
             comment_count=0,
             sentiment=SentimentAnalysis(
                 positive=0,
@@ -522,7 +525,7 @@ async def analyze_comments(req: AnalyzeRequest):
 
     return AnalyzeResponse(
         platform=req.platform,
-        content_id=req.content_id,
+        content_id=content_id,
         comment_count=comment_count,
         sentiment=SentimentAnalysis(
             positive=round(sentiment_data.get("positive", 0)),

@@ -77,6 +77,7 @@ async def update_bilibili_video(video_item: Dict):
         "video_url": f"https://www.bilibili.com/video/av{video_id}",
         "video_cover_url": video_item_view.get("pic", ""),
         "source_keyword": source_keyword_var.get(),
+        "task_id": config.TASK_ID if getattr(config, 'TASK_ID', None) else None,
     }
     utils.logger.info(f"[store.bilibili.update_bilibili_video] bilibili video id:{video_id}, title:{save_content_item.get('title')}")
     await BiliStoreFactory.create_store().store_content(content_item=save_content_item)

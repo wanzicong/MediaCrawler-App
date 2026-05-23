@@ -154,6 +154,9 @@ class ConfigService:
             for k, v in overrides.items():
                 if v is not None:
                     merged[k] = v
+            # 同步 headless → cdp_headless（CDP 模式也使用无头配置）
+            if "headless" in overrides:
+                merged["cdp_headless"] = overrides["headless"]
         merged["save_option"] = "db"
         return merged
 

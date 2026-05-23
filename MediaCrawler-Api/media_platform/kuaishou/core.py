@@ -95,6 +95,10 @@ class KuaishouCrawler(AbstractCrawler):
                 await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
 
+            # Close blank default pages from browser startup
+            for _p in self.browser_context.pages:
+                await _p.close()
+
             self.context_page = await self.browser_context.new_page()
             await self.context_page.goto(f"{self.index_url}?isHome=1")
 

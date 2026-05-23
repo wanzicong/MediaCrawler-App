@@ -95,6 +95,10 @@ class BilibiliCrawler(AbstractCrawler):
                 # stealth.min.js is a js script to prevent the website from detecting the crawler.
                 await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
+            # Close blank default pages from browser startup
+            for _p in self.browser_context.pages:
+                await _p.close()
+
             self.context_page = await self.browser_context.new_page()
             await self.context_page.goto(self.index_url)
 
@@ -506,6 +510,29 @@ class BilibiliCrawler(AbstractCrawler):
         )
         return bilibili_client_obj
 
+    def _detect_browser_channel(self) -> str:
+        """Auto-detect available browser: Chrome or Edge"""
+        import platform
+        system = platform.system()
+        if system == "Windows":
+            chrome_paths = [
+                os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+            ]
+            for p in chrome_paths:
+                if os.path.exists(p):
+                    return "chrome"
+            # Fallback to Edge
+            edge_paths = [
+                os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+                os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+            ]
+            for p in edge_paths:
+                if os.path.exists(p):
+                    return "msedge"
+        return "chrome"  # Default
+
     async def launch_browser(
         self,
         chromium: BrowserType,
@@ -521,7 +548,8 @@ class BilibiliCrawler(AbstractCrawler):
         :param headless: headless mode
         :return: browser context
         """
-        utils.logger.info("[BilibiliCrawler.launch_browser] Begin create browser context ...")
+        browser_channel = self._detect_browser_channel()
+        utils.logger.info(f"[BilibiliCrawler.launch_browser] Using browser channel: {browser_channel}")
         if config.SAVE_LOGIN_STATE:
             # feat issue #14
             # we will save login state to avoid login every time
@@ -536,7 +564,7 @@ class BilibiliCrawler(AbstractCrawler):
                     "height": 1080
                 },
                 user_agent=user_agent,
-                channel="chrome",  # Use system's stable Chrome version
+                channel=browser_channel,
             )
             return browser_context
         else:

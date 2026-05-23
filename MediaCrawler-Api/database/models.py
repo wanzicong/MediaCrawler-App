@@ -46,6 +46,7 @@ class BilibiliVideo(Base):
     video_danmaku = Column(Text, comment='弹幕数')
     video_comment = Column(Text, comment='评论数')
     video_cover_url = Column(Text, comment='视频封面URL')
+    video_download_url = Column(Text, comment='视频下载链接')
     source_keyword = Column(Text, default='', comment='来源关键词')
 
 class BilibiliVideoComment(Base):

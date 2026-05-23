@@ -72,6 +72,11 @@ class CrawlerStartRequest(BaseModel):
     save_option: SaveDataOptionEnum = SaveDataOptionEnum.DB
     cookies: str = ""
     headless: bool = False
+    enable_cdp_mode: bool = True
+    crawler_max_notes_count: int | None = None
+    crawler_max_sleep_sec: int | None = None
+    crawler_max_sleep_sec_max: int | None = None
+    max_concurrency_num: int | None = None
 
 
 class CrawlerStatusResponse(BaseModel):

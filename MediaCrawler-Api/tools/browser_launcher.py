@@ -147,8 +147,12 @@ class BrowserLauncher:
         # Headless mode
         if headless:
             args.extend([
-                "--headless=new",  # Use new headless mode
+                "--headless",  # Chrome 112+ 统一使用 --headless (默认新渲染模式)
                 "--disable-gpu",
+                "--hide-scrollbars",
+                "--mute-audio",
+                "--no-startup-window",
+                "--window-size=1920,1080",
             ])
         else:
             # Extra arguments for non-headless mode
