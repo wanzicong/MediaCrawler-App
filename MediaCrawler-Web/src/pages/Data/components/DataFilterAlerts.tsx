@@ -1,5 +1,6 @@
 import { Alert, Tag } from 'antd';
 import { FIELD_LABELS, PLATFORM_LABELS } from '@/constants';
+import type { PlatformInfo } from '@/api/modules/platforms';
 
 interface Props {
   filterTaskId: string | null;
@@ -7,6 +8,7 @@ interface Props {
   kind: string;
   platform: string;
   contentIdField: string;
+  platforms?: PlatformInfo[];
   onClear: () => void;
 }
 
@@ -16,8 +18,11 @@ export default function DataFilterAlerts({
   kind,
   platform,
   contentIdField,
+  platforms,
   onClear,
 }: Props) {
+  const platformName = platforms?.find((p) => p.code === platform)?.name || PLATFORM_LABELS[platform] || platform;
+
   return (
     <>
       {filterTaskId && (
@@ -29,7 +34,7 @@ export default function DataFilterAlerts({
           message={
             <span>
               正在查看任务 <Tag>#{filterTaskId}</Tag> 的{' '}
-              {PLATFORM_LABELS[platform] || platform} 内容数据
+              {platformName} 内容数据
             </span>
           }
           style={{ marginBottom: 16 }}

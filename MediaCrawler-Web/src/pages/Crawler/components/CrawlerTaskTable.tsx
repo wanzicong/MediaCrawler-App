@@ -7,6 +7,7 @@ import {
 } from 'antd';
 import { ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { useQuery } from '@tanstack/react-query';
 
 import { calcDuration } from '@/utils/format';
 import {
@@ -14,6 +15,7 @@ import {
   CRAWLER_TYPE_LABELS,
   TASK_STATUS_CONFIG,
 } from '@/constants';
+import { fetchEnabledPlatforms } from '@/api/modules/platforms';
 import type { CrawlerTask } from '@/types/config';
 
 interface Props {
@@ -49,6 +51,15 @@ export default function CrawlerTaskTable({
   onDelete,
   onRefresh,
 }: Props) {
+  const { data: platforms } = useQuery({
+    queryKey: ['platforms', 'enabled'],
+    queryFn: fetchEnabledPlatforms,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const getPlatformName = (code: string) =>
+    platforms?.find((p) => p.code === code)?.name || PLATFORM_LABELS[code] || code || '—';
+
   const columns = [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
     {
@@ -56,7 +67,7 @@ export default function CrawlerTaskTable({
       key: 'platform',
       width: 80,
       render: (_: unknown, r: CrawlerTask) =>
-        PLATFORM_LABELS[r.payload_snapshot?.platform] || r.payload_snapshot?.platform || '—',
+        getPlatformName(r.payload_snapshot?.platform || ''),
     },
     {
       title: '类型',

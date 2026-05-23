@@ -6,12 +6,13 @@ import {
   Image,
   Modal,
   Space,
+  Table,
   Tag,
   Typography,
 } from 'antd';
 import { BarChartOutlined, DeleteOutlined, EyeOutlined, SearchOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { useMemo, useState, useCallback, useRef } from 'react';
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import {
@@ -31,6 +32,7 @@ import {
   CONTENT_ID_FIELDS,
   KIND_LABELS,
 } from '@/constants';
+import { fetchEnabledPlatforms } from '@/api/modules/platforms';
 
 import DataFilterBar from './components/DataFilterBar';
 import DataFilterAlerts from './components/DataFilterAlerts';
@@ -44,9 +46,9 @@ export default function DataPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const urlTaskId = searchParams.get('task_id');
-  const urlPlatform = searchParams.get('platform') || 'xhs';
+  const urlPlatform = searchParams.get('platform'); // URL 参数或 null
 
-  const [platform, setPlatform] = useState(urlPlatform);
+  const [platform, setPlatform] = useState(urlPlatform || '');
   const [kind, setKind] = useState('contents');
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
@@ -57,10 +59,33 @@ export default function DataPage() {
   const [analyzingContentId, setAnalyzingContentId] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [commentModalCid, setCommentModalCid] = useState<string | null>(null);
+  const [commentModalPage, setCommentModalPage] = useState(1);
 
   const { data: platformMeta } = useQuery({
     queryKey: ['db-platforms'],
     queryFn: fetchDbPlatforms,
+  });
+
+  const { data: enabledPlatforms } = useQuery({
+    queryKey: ['platforms', 'enabled'],
+    queryFn: fetchEnabledPlatforms,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // 无 URL 参数时，默认选中第一个启用的平台
+  useEffect(() => {
+    if (!urlPlatform && enabledPlatforms && enabledPlatforms.length > 0 && !platform) {
+      setPlatform(enabledPlatforms[0].code);
+    }
+  }, [urlPlatform, enabledPlatforms, platform]);
+
+  // 评论弹窗数据
+  const { data: commentModalData, isLoading: commentModalLoading } = useQuery({
+    queryKey: ['content-comments', platform, commentModalCid, commentModalPage],
+    queryFn: () => fetchContentComments(platform, commentModalCid!, { page: commentModalPage, page_size: 20 }),
+    enabled: !!commentModalCid,
+    placeholderData: keepPreviousData,
   });
 
   const kinds = useMemo(() => {
@@ -84,6 +109,7 @@ export default function DataPage() {
     },
     placeholderData: keepPreviousData,
     retry: false,
+    enabled: !!platform,
   });
 
   const deleteMutation = useMutation({
@@ -197,13 +223,11 @@ export default function DataPage() {
                   icon={<EyeOutlined />}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setFilterContentId(cid);
-                    setKind('comments');
-                    setPage(1);
-                    setFilterTaskId(null);
+                    setCommentModalCid(cid);
+                    setCommentModalPage(1);
                   }}
                 >
-                  查看评论
+                  评论
                 </Button>
                 <Button
                   type="link"
@@ -218,24 +242,6 @@ export default function DataPage() {
                   AI 分析
                 </Button>
               </>
-            )}
-            {kind === 'comments' && cid && (
-              <Button
-                type="link"
-                size="small"
-                icon={<SearchOutlined />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFilterContentId(cid);
-                  setFilterTaskId(null);
-                  setKind('contents');
-                  setSearchKeyword('');
-                  setKeyword('');
-                  setPage(1);
-                }}
-              >
-                查看原内容
-              </Button>
             )}
             <Button
               type="link"
@@ -365,6 +371,7 @@ export default function DataPage() {
           kind={kind}
           platform={platform}
           contentIdField={contentIdField}
+          platforms={enabledPlatforms}
           onClear={handleClearFilters}
         />
 
@@ -388,6 +395,53 @@ export default function DataPage() {
           onDelete={handleDeleteDetail}
           onClose={() => setDetailRow(null)}
         />
+
+        <Modal
+          title={
+            <Space>
+              <EyeOutlined />
+              <span>评论列表</span>
+              {commentModalData && (
+                <Tag>{commentModalData.total} 条评论</Tag>
+              )}
+            </Space>
+          }
+          open={!!commentModalCid}
+          onCancel={() => setCommentModalCid(null)}
+          footer={null}
+          width={800}
+        >
+          <Table
+            rowKey="id"
+            loading={commentModalLoading}
+            dataSource={commentModalData?.items ?? []}
+            columns={[
+              { title: 'ID', dataIndex: 'id', width: 60 },
+              { title: '评论内容', dataIndex: 'content', ellipsis: true, render: (v: unknown) => v ? String(v) : '—' },
+              {
+                title: '点赞',
+                dataIndex: 'like_count',
+                width: 80,
+                render: (v: unknown) => v ?? '—',
+              },
+              {
+                title: '时间',
+                dataIndex: 'create_time',
+                width: 160,
+                render: (v: unknown) => v ? formatText('create_time', v) : '—',
+              },
+            ]}
+            pagination={{
+              current: commentModalPage,
+              pageSize: 20,
+              total: commentModalData?.total ?? 0,
+              onChange: setCommentModalPage,
+              showTotal: (t) => `共 ${t} 条`,
+            }}
+            size="small"
+            scroll={{ y: 400 }}
+          />
+        </Modal>
 
         <Modal
           title={

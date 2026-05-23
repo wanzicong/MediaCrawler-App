@@ -14,6 +14,7 @@ import {
 } from 'antd';
 import { EyeOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { useQuery } from '@tanstack/react-query';
 
 import { calcDuration } from '@/utils/format';
 import {
@@ -21,6 +22,7 @@ import {
   CRAWLER_TYPE_LABELS,
   TASK_STATUS_CONFIG,
 } from '@/constants';
+import { fetchEnabledPlatforms } from '@/api/modules/platforms';
 import type { CrawlerTask, TaskDataStats } from '@/types/config';
 
 interface Props {
@@ -49,6 +51,15 @@ export default function CrawlerTaskDetailModal({
   onDelete,
 }: Props) {
   const { token } = theme.useToken();
+
+  const { data: platforms } = useQuery({
+    queryKey: ['platforms', 'enabled'],
+    queryFn: fetchEnabledPlatforms,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const getPlatformName = (code: string) =>
+    platforms?.find((p) => p.code === code)?.name || PLATFORM_LABELS[code] || code || '—';
 
   return (
     <Modal
@@ -93,7 +104,7 @@ export default function CrawlerTaskDetailModal({
             <Descriptions.Item label="任务 ID">{task.id}</Descriptions.Item>
             <Descriptions.Item label="方案 ID">{task.profile_id ?? '—'}</Descriptions.Item>
             <Descriptions.Item label="平台">
-              {PLATFORM_LABELS[task.payload_snapshot?.platform] || task.payload_snapshot?.platform}
+              {getPlatformName(task.payload_snapshot?.platform || '')}
             </Descriptions.Item>
             <Descriptions.Item label="爬取类型">
               {CRAWLER_TYPE_LABELS[task.payload_snapshot?.crawler_type] ||

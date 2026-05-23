@@ -82,6 +82,7 @@ class DouYinCrawler(AbstractCrawler):
                     None,
                     headless=config.CDP_HEADLESS,
                 )
+                await self.browser_context.add_init_script(path="libs/stealth.min.js")
             else:
                 utils.logger.info("[DouYinCrawler] 使用标准模式启动浏览器")
                 # Launch a browser context.

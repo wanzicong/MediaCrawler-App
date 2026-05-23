@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { FormInstance } from 'antd';
 import {
   App,
@@ -8,14 +8,17 @@ import {
   Form,
   Input,
   InputNumber,
+  Radio,
   Row,
   Select,
   Switch,
   Typography,
 } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
 import type { ConfigOptionsResponse, CrawlerStartPayload, PlatformItem } from '@/types/api';
 import type { CrawlerProfile } from '@/types/config';
+import { fetchKeywords } from '@/api/modules/keywords';
 
 interface Props {
   form: FormInstance<CrawlerStartPayload & { profile_id?: number }>;
@@ -40,7 +43,30 @@ export default function CrawlerLaunchForm({
 }: Props) {
   const { modal } = App.useApp();
   const crawlerType = Form.useWatch('crawler_type', form);
+  const platform = Form.useWatch('platform', form);
+  const keywordsValue = Form.useWatch('keywords', form);
   const dirtyRef = useRef(false);
+
+  // Keyword input mode: manual or library
+  const [keywordMode, setKeywordMode] = useState<'manual' | 'library'>('manual');
+
+  // Fetch keywords from library when in library mode
+  const { data: kwData, isLoading: keywordsLoading } = useQuery({
+    queryKey: ['keywords', platform],
+    queryFn: () => fetchKeywords({ platform, page_size: 200 }),
+    enabled: keywordMode === 'library' && crawlerType === 'search',
+  });
+
+  const keywords = kwData?.items ?? [];
+
+  // Build options for the keyword library Select dropdown
+  const keywordOptions = keywords.map((k) => ({
+    value: k.keyword,
+    label: `${k.keyword} [${k.platform}]`,
+  }));
+
+  // Derived array from comma-separated keywords string (for library Select value)
+  const selectedKeywords = keywordsValue ? keywordsValue.split(',').map((s) => s.trim()).filter(Boolean) : [];
 
   const handleProfileChange = (id: number) => {
     if (dirtyRef.current) {
@@ -60,7 +86,6 @@ export default function CrawlerLaunchForm({
   };
 
   return (
-    <Card>
       <Form
         form={form}
         layout="vertical"
@@ -119,9 +144,59 @@ export default function CrawlerLaunchForm({
         </Row>
 
         {crawlerType === 'search' && (
-          <Form.Item name="keywords" label="搜索关键词" rules={[{ required: true }]}>
-            <Input placeholder="多个关键词用英文逗号分隔" />
-          </Form.Item>
+          <>
+            <Form.Item label="关键词输入方式">
+              <Radio.Group
+                value={keywordMode}
+                onChange={(e) => setKeywordMode(e.target.value)}
+                style={{ marginRight: 16 }}
+              >
+                <Radio.Button value="manual">手动输入</Radio.Button>
+                <Radio.Button value="library">从词库选择</Radio.Button>
+              </Radio.Group>
+              <Button
+                type="link"
+                onClick={() => window.open('/keywords', '_blank')}
+                size="small"
+              >
+                打开词库
+              </Button>
+            </Form.Item>
+
+            {keywordMode === 'manual' ? (
+              <Form.Item name="keywords" label="搜索关键词" rules={[{ required: true }]}>
+                <Input placeholder="多个关键词用英文逗号分隔" />
+              </Form.Item>
+            ) : (
+              <>
+                <Form.Item
+                  label="搜索关键词"
+                  required
+                  help={selectedKeywords.length > 0 ? `已选 ${selectedKeywords.length} 个关键词` : undefined}
+                >
+                  <Select
+                    mode="multiple"
+                    placeholder="从词库选择关键词..."
+                    loading={keywordsLoading}
+                    value={selectedKeywords}
+                    options={keywordOptions}
+                    onChange={(values: string[]) => {
+                      form.setFieldsValue({ keywords: values.join(',') });
+                    }}
+                    optionFilterProp="label"
+                    showSearch
+                    allowClear
+                    filterOption={(input, option) =>
+                      (option?.label as string)?.toLowerCase().includes(input.toLowerCase()) ?? false
+                    }
+                  />
+                </Form.Item>
+                <Form.Item name="keywords" hidden>
+                  <Input />
+                </Form.Item>
+              </>
+            )}
+          </>
         )}
         {crawlerType === 'detail' && (
           <Form.Item name="specified_ids" label="帖子/视频 ID" rules={[{ required: true }]}>
@@ -163,6 +238,5 @@ export default function CrawlerLaunchForm({
           </Button>
         </Form.Item>
       </Form>
-    </Card>
   );
 }

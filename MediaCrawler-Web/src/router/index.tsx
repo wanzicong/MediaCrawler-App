@@ -9,6 +9,7 @@ const SettingsPage = lazy(() => import('@/pages/Settings'));
 const CrawlerPage = lazy(() => import('@/pages/Crawler'));
 const DataPage = lazy(() => import('@/pages/Data'));
 const AiChatPage = lazy(() => import('@/pages/AiChat'));
+const KeywordsPage = lazy(() => import('@/pages/Keywords'));
 const NotFoundPage = lazy(() => import('@/pages/NotFound'));
 
 function PageLoader() {
@@ -48,6 +49,10 @@ export const router = createBrowserRouter([
       {
         path: 'ai-chat',
         element: withSuspense(<AiChatPage />),
+      },
+      {
+        path: 'keywords',
+        element: withSuspense(<KeywordsPage />),
       },
     ],
   },

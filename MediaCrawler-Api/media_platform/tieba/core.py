@@ -90,6 +90,7 @@ class TieBaCrawler(AbstractCrawler):
                     self.user_agent,
                     headless=config.CDP_HEADLESS,
                 )
+                await self.browser_context.add_init_script(path="libs/stealth.min.js")
             else:
                 utils.logger.info("[BaiduTieBaCrawler] Launching browser in standard mode")
                 # Launch a browser context.

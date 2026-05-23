@@ -1,82 +1,213 @@
+// ═══════════════════════════════════════════════════════════════
+//  Modern Light Sidebar — Clean, Young, Professional
+// ═══════════════════════════════════════════════════════════════
+
 .layout {
   height: 100vh;
   width: 100%;
   overflow: hidden;
 }
 
-// --------- Sider ---------
+// ── Sider ────────────────────────────────────────────────────
+
 .sider {
   position: relative;
   z-index: 100;
-  box-shadow:
-    2px 0 12px rgba(40, 30, 20, 0.10),
-    1px 0 4px rgba(40, 30, 20, 0.06);
+  background: linear-gradient(180deg, #FAFBFC 0%, #F4F6FA 40%, #EDF1F7 100%) !important;
+  border-right: 1px solid #E8ECF2;
+  box-shadow: 1px 0 8px rgba(0, 0, 0, 0.03);
+
+  :global(.ant-layout-sider-children) {
+    background: transparent;
+  }
 }
 
 .siderInner {
   height: 100%;
   display: flex;
   flex-direction: column;
+  padding: 12px 0;
 }
 
-// --------- Logo ---------
+// ── Logo ─────────────────────────────────────────────────────
+
 .logo {
-  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 8px 18px 20px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.logoIconBox {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  gap: 10px;
-  overflow: hidden;
   flex-shrink: 0;
-}
-
-.desktopSider:global(.ant-layout-sider-collapsed) .logo {
-  padding: 0 12px;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
 }
 
 .logoIcon {
-  font-size: 22px;
-  background: linear-gradient(135deg, #D97757, #E8956B);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  flex-shrink: 0;
+  font-size: 20px;
+  color: #FFFFFF;
+}
+
+.logoTextGroup {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .logoText {
   margin: 0 !important;
-  color: var(--sidebar-text) !important;
-  white-space: nowrap;
-  font-size: 15px !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.3px;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: #1E293B !important;
+  line-height: 1.3 !important;
+  letter-spacing: -0.2px;
 }
 
-.siderFooter {
-  margin-top: auto;
-  padding: 12px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
+.logoSub {
+  font-size: 11px;
+  color: #94A3B8;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+// Collapsed logo state
+.desktopSider:global(.ant-layout-sider-collapsed) .logo {
+  padding: 8px 0 20px;
   justify-content: center;
 }
 
-.version {
-  color: var(--text-secondary);
-  font-size: 12px;
+// ── Menu ─────────────────────────────────────────────────────
+
+.menu {
+  flex: 1;
+  background: transparent !important;
+  border-inline-end: none !important;
+  padding: 0 6px;
+  overflow-y: auto;
+
+  &::-webkit-scrollbar {
+    width: 3px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #DDE1E8;
+    border-radius: 3px;
+  }
+
+  // Remove Ant Design's default active background
+  :global {
+    .ant-menu-item {
+      margin: 2px 4px !important;
+      padding-left: 16px !important;
+      border-radius: 10px !important;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+
+      &::after {
+        display: none !important; // hide right border
+      }
+    }
+
+    .ant-menu-item:not(.ant-menu-item-selected) {
+      &:hover {
+        background: rgba(99, 102, 241, 0.04) !important;
+        padding-left: 20px !important; // subtle slide-in on hover
+      }
+    }
+
+    // Active item container — Ant Design applies .ant-menu-item-selected
+    .ant-menu-item-selected {
+      background: transparent !important;
+    }
+  }
 }
 
-// --------- Header ---------
+// ── Menu Item — Inactive ─────────────────────────────────────
+
+.menuItem {
+  height: 44px !important;
+  line-height: 44px !important;
+}
+
+.menuIcon {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px !important;
+  transition: all 0.3s ease !important;
+}
+
+.menuLabel {
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748B;
+  transition: all 0.3s ease;
+}
+
+// ── Menu Item — Active ───────────────────────────────────────
+
+.menuItemActive {
+  background: #FFFFFF !important;
+  border-radius: 10px !important;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    0 0 0 1px rgba(0, 0, 0, 0.03),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+
+  // Subtle glow ring matching the menu item's gradient
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 11px;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.08));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .menuLabel {
+    color: #1E293B;
+    font-weight: 600;
+  }
+}
+
+// ── Footer ───────────────────────────────────────────────────
+
+.siderFooter {
+  margin-top: auto;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.version {
+  font-size: 12px;
+  color: #94A3B8;
+  font-weight: 500;
+}
+
+// ── Header ───────────────────────────────────────────────────
+
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px !important;
-  background: var(--bg-container) !important;
-  border-bottom: 1px solid var(--border-color);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  background: #FFFFFF !important;
+  border-bottom: 1px solid #E8ECF2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   z-index: 10;
   flex-shrink: 0;
   height: 56px;
@@ -100,14 +231,15 @@
 
 .headerTime {
   font-size: 13px;
-  color: var(--text-muted);
+  color: #94A3B8;
+  font-weight: 500;
 }
 
 .trigger {
   font-size: 18px;
   cursor: pointer;
-  color: var(--text-secondary);
-  transition: color 0.2s, background 0.2s;
+  color: #64748B;
+  transition: all 0.2s;
   width: 36px;
   height: 36px;
   display: flex;
@@ -116,12 +248,13 @@
   border-radius: 8px;
 
   &:hover {
-    color: var(--brand-primary);
-    background: var(--bg-layout);
+    color: #6366F1;
+    background: rgba(99, 102, 241, 0.06);
   }
 }
 
-// --------- Right area ---------
+// ── Main Area ────────────────────────────────────────────────
+
 .mainArea {
   flex: 1;
   min-width: 0;
@@ -131,7 +264,8 @@
   overflow: hidden;
 }
 
-// --------- Content card ---------
+// ── Content ──────────────────────────────────────────────────
+
 .content {
   flex: 1;
   min-height: 0;
@@ -139,19 +273,20 @@
   padding: 12px;
   overflow-y: auto;
   overflow-x: hidden;
-  background: var(--bg-container);
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  background: #FFFFFF;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   display: flex;
   flex-direction: column;
 
   @media (min-width: 769px) {
-    margin: 16px;
-    padding: 24px;
+    margin: 12px;
+    padding: 20px;
   }
 }
 
-// --------- Responsive ---------
+// ── Responsive ───────────────────────────────────────────────
+
 .mobileMenuBtn {
   display: none !important;
 
@@ -176,11 +311,11 @@
 
 .mobileDrawer {
   :global(.ant-drawer-body) {
-    background: #F8F8F6;
+    background: linear-gradient(180deg, #FAFBFC 0%, #F4F6FA 40%, #EDF1F7 100%);
     padding: 0;
   }
 
   :global(.ant-drawer-content-wrapper) {
-    box-shadow: 2px 0 12px rgba(40, 30, 20, 0.18);
+    box-shadow: 2px 0 20px rgba(0, 0, 0, 0.08);
   }
 }

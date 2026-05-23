@@ -23,6 +23,8 @@ from .config_mgmt import router as config_mgmt_router
 from .system import router as system_router
 from .websocket import router as websocket_router
 from .ai import router as ai_router
+from .keywords import router as keywords_router
+from .platforms import router as platforms_router
 
 __all__ = [
     "crawler_router",
@@ -32,4 +34,6 @@ __all__ = [
     "system_router",
     "websocket_router",
     "ai_router",
+    "keywords_router",
+    "platforms_router",
 ]

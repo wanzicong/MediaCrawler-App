@@ -84,6 +84,7 @@ class WeiboCrawler(AbstractCrawler):
                     self.mobile_user_agent,
                     headless=config.CDP_HEADLESS,
                 )
+                await self.browser_context.add_init_script(path="libs/stealth.min.js")
             else:
                 utils.logger.info("[WeiboCrawler] Launching browser with standard mode")
                 # Launch a browser context.

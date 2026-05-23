@@ -3,6 +3,7 @@ import {
   App,
   Alert,
   Button,
+  Card,
   Form,
   Modal,
   Space,
@@ -15,7 +16,7 @@ import { useNavigate } from 'react-router-dom';
 
 import {
   fetchConfigOptions,
-  fetchPlatforms,
+  fetchEnabledPlatforms,
   startCrawler,
   stopCrawler,
   fetchCrawlerTasks,
@@ -48,8 +49,8 @@ export default function CrawlerPage() {
   const [detailOpen, setDetailOpen] = useState(false);
 
   const { data: platforms } = useQuery({
-    queryKey: ['config', 'platforms'],
-    queryFn: fetchPlatforms,
+    queryKey: ['platforms', 'enabled'],
+    queryFn: fetchEnabledPlatforms,
   });
 
   const { data: options } = useQuery({
@@ -222,10 +223,12 @@ export default function CrawlerPage() {
         description="启动时会创建 crawler_task 记录，子进程通过 task_id 从数据库加载完整配置。"
       />
 
+      <Card style={{ borderRadius: 12 }}>
       <Tabs
         activeKey={activeTab}
         onChange={setActiveTab}
         destroyInactiveTabPane
+        tabBarStyle={{ marginBottom: 24, paddingLeft: 4 }}
         items={[
           {
             key: 'launch',
@@ -234,7 +237,7 @@ export default function CrawlerPage() {
               <CrawlerLaunchForm
                 form={form}
                 profiles={profiles}
-                platforms={platforms?.platforms}
+                platforms={platforms?.map((p) => ({ value: p.code as PlatformCode, label: p.name, icon: p.icon }))}
                 options={options}
                 isRunning={isRunning}
                 isPending={startMutation.isPending}
@@ -268,7 +271,7 @@ export default function CrawlerPage() {
       ]}
       />
 
-      <div style={{ marginTop: 16 }}>
+      <div style={{ marginTop: 20 }}>
         <CrawlerLogViewer
           logs={logs}
           connected={connected}
@@ -276,6 +279,7 @@ export default function CrawlerPage() {
           onRefresh={refreshLogs}
         />
       </div>
+      </Card>
 
       <CrawlerTaskDetailModal
         task={detailTask}

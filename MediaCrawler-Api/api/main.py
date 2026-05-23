@@ -41,6 +41,8 @@ from .routers import (
     system_router,
     websocket_router,
     ai_router,
+    keywords_router,
+    platforms_router,
 )
 
 load_dotenv()
@@ -54,6 +56,17 @@ async def lifespan(app: FastAPI):
         await ConfigService.ensure_default_profile()
     except Exception:
         pass
+
+    # 平台元数据：种子默认数据 + 初始化缓存
+    try:
+        from services.platform_service import PlatformService
+        from services.data_query_service import init_platform_meta
+
+        await PlatformService.seed_default_platforms()
+        await init_platform_meta()
+    except Exception:
+        pass
+
     yield
 
 
@@ -89,6 +102,8 @@ app.include_router(data_db_router, prefix="/api")
 app.include_router(data_router, prefix="/api")
 app.include_router(websocket_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
+app.include_router(keywords_router, prefix="/api")
+app.include_router(platforms_router, prefix="/api")
 
 
 @app.get("/")

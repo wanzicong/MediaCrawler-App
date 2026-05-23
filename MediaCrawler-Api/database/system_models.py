@@ -65,3 +65,50 @@ class ChatMemory(Base):
     category = Column(String(64), default="通用", comment="分类标签")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class KeywordGroup(Base):
+    """关键词分组"""
+
+    __tablename__ = "keyword_group"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(64), nullable=False, unique=True, comment="分组名称")
+    description = Column(String(256), default="", comment="分组说明")
+    color = Column(String(16), default="#6366f1", comment="分组颜色")
+    sort_order = Column(Integer, default=0, comment="排序权重")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Keyword(Base):
+    """关键词"""
+
+    __tablename__ = "keyword"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_id = Column(Integer, nullable=True, index=True, comment="所属分组 ID")
+    keyword = Column(String(256), nullable=False, comment="关键词文本")
+    platform = Column(String(32), default="xhs", comment="目标平台")
+    source = Column(String(32), default="manual", comment="来源: manual / fission / ai")
+    status = Column(String(32), default="pending", comment="状态: pending / crawled / has_results / no_results")
+    crawled_count = Column(Integer, default=0, comment="已爬取条数")
+    results_count = Column(Integer, default=0, comment="有效结果数")
+    notes = Column(Text, default="", comment="备注")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Platform(Base):
+    """自媒体平台元数据（显示名称、图标、排序、启停）"""
+
+    __tablename__ = "platform"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(32), nullable=False, unique=True, index=True, comment="平台代码: xhs/dy/ks/bili/wb/tieba/zhihu")
+    name = Column(String(64), nullable=False, comment="平台显示名称")
+    icon = Column(String(64), default="appstore", comment="前端图标名(Ant Design icon)")
+    enabled = Column(Boolean, default=True, comment="是否启用")
+    sort_order = Column(Integer, default=0, comment="排序权重(越小越靠前)")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

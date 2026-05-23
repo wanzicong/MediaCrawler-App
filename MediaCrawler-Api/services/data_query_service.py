@@ -26,76 +26,26 @@ from database.models import (
     ZhihuComment,
 )
 
-PLATFORM_META = {
-    "xhs": {
-        "label": "小红书",
-        "icon": "book-open",
-        "content_id_field": "note_id",
-        "kinds": {
-            "contents": {"model": XhsNote, "label": "笔记"},
-            "comments": {"model": XhsNoteComment, "label": "评论"},
-            "creators": {"model": XhsCreator, "label": "创作者"},
-        },
-    },
-    "dy": {
-        "label": "抖音",
-        "icon": "music",
-        "content_id_field": "aweme_id",
-        "kinds": {
-            "contents": {"model": DouyinAweme, "label": "视频"},
-            "comments": {"model": DouyinAwemeComment, "label": "评论"},
-        },
-    },
-    "ks": {
-        "label": "快手",
-        "icon": "video",
-        "content_id_field": "video_id",
-        "kinds": {
-            "contents": {"model": KuaishouVideo, "label": "视频"},
-            "comments": {"model": KuaishouVideoComment, "label": "评论"},
-        },
-    },
-    "bili": {
-        "label": "B站",
-        "icon": "tv",
-        "content_id_field": "video_id",
-        "kinds": {
-            "contents": {"model": BilibiliVideo, "label": "视频"},
-            "comments": {"model": BilibiliVideoComment, "label": "评论"},
-        },
-    },
-    "wb": {
-        "label": "微博",
-        "icon": "message-circle",
-        "content_id_field": "note_id",
-        "kinds": {
-            "contents": {"model": WeiboNote, "label": "微博"},
-            "comments": {"model": WeiboNoteComment, "label": "评论"},
-        },
-    },
-    "tieba": {
-        "label": "贴吧",
-        "icon": "messages-square",
-        "content_id_field": "note_id",
-        "kinds": {
-            "contents": {"model": TiebaNote, "label": "帖子"},
-            "comments": {"model": TiebaComment, "label": "评论"},
-        },
-    },
-    "zhihu": {
-        "label": "知乎",
-        "icon": "help-circle",
-        "content_id_field": "content_id",
-        "kinds": {
-            "contents": {"model": ZhihuContent, "label": "内容"},
-            "comments": {"model": ZhihuComment, "label": "评论"},
-        },
-    },
-}
+# ── 平台元数据缓存（应用启动时从 DB 加载，结构同旧 PLATFORM_META） ──
+PLATFORM_META: dict = {}
+
+
+async def init_platform_meta():
+    """从数据库加载已启用平台并合并模型配置，填充 PLATFORM_META 缓存"""
+    from services.platform_service import PlatformService
+
+    global PLATFORM_META
+    new_meta = await PlatformService.get_platform_meta()
+    PLATFORM_META.clear()
+    PLATFORM_META.update(new_meta)
 
 
 def list_platforms() -> list[dict]:
-    return [
+    """
+    获取前端下拉框所需的平台列表。
+    仅返回缓存中存在的平台（即已启用且已配置模型映射的平台），按 sort_order 排序。
+    """
+    items = [
         {
             "value": key,
             "label": meta["label"],
@@ -103,9 +53,12 @@ def list_platforms() -> list[dict]:
             "kinds": [
                 {"value": k, "label": v["label"]} for k, v in meta["kinds"].items()
             ],
+            "sort_order": meta.get("sort_order", 0),
         }
         for key, meta in PLATFORM_META.items()
     ]
+    items.sort(key=lambda x: x["sort_order"])
+    return items
 
 
 JS_MAX_SAFE_INTEGER = 9007199254740991

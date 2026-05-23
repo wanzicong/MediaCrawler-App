@@ -85,6 +85,8 @@ class BilibiliCrawler(AbstractCrawler):
                     self.user_agent,
                     headless=config.CDP_HEADLESS,
                 )
+                # Also add stealth script in CDP mode to prevent bot detection
+                await self.browser_context.add_init_script(path="libs/stealth.min.js")
             else:
                 utils.logger.info("[BilibiliCrawler] Launching browser using standard mode")
                 # Launch a browser context.
@@ -96,9 +98,18 @@ class BilibiliCrawler(AbstractCrawler):
             self.context_page = await self.browser_context.new_page()
             await self.context_page.goto(self.index_url)
 
-            # Create a client to interact with the xiaohongshu website.
+            # Create a client to interact with the bilibili API.
             self.bili_client = await self.create_bilibili_client(httpx_proxy_format)
-            if not await self.bili_client.pong():
+            try:
+                pong_result = await self.bili_client.pong()
+            except Exception as e:
+                utils.logger.error(f"[BilibiliCrawler] API connection failed: {e}")
+                utils.logger.error(
+                    "B站 API 无法连接。可能原因: 1) 网络不通 2) Headless+CDP 模式被B站反爬拦截 "
+                    "3) 代理配置错误。建议关闭 CDP 模式和 Headless 模式重试。"
+                )
+                raise
+            if not pong_result:
                 login_obj = BilibiliLogin(
                     login_type=config.LOGIN_TYPE,
                     login_phone="",  # your phone number

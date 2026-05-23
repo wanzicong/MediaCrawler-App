@@ -1,3 +1,5 @@
+// NOTE: 平台数据已迁移到数据库，通过 GET /api/platforms 获取
+// 以下常量仅作为 fallback，新代码应使用 fetchEnabledPlatforms()
 export const PLATFORM_LABELS: Record<string, string> = {
   xhs: '小红书',
   dy: '抖音',
