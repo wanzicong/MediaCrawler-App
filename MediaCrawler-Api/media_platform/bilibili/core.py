@@ -77,23 +77,25 @@ class BilibiliCrawler(AbstractCrawler):
 
         async with async_playwright() as playwright:
             # Choose launch mode based on configuration
-            if config.ENABLE_CDP_MODE:
+            # headless=True 时优先使用 Playwright 原生 headless（最可靠），
+            # 非 headless 或明确要求 CDP 时走 CDP 子进程模式
+            _use_headless = config.CDP_HEADLESS or config.HEADLESS
+            if config.ENABLE_CDP_MODE and not _use_headless:
                 utils.logger.info("[BilibiliCrawler] Launching browser using CDP mode")
                 self.browser_context = await self.launch_browser_with_cdp(
                     playwright,
                     playwright_proxy_format,
                     self.user_agent,
-                    headless=config.CDP_HEADLESS,
+                    headless=False,
                 )
-                # Also add stealth script in CDP mode to prevent bot detection
-                await self.browser_context.add_init_script(path="libs/stealth.min.js")
             else:
-                utils.logger.info("[BilibiliCrawler] Launching browser using standard mode")
-                # Launch a browser context.
+                utils.logger.info(f"[BilibiliCrawler] Launching browser using standard mode (headless={_use_headless})")
                 chromium = playwright.chromium
-                self.browser_context = await self.launch_browser(chromium, None, self.user_agent, headless=config.HEADLESS)
-                # stealth.min.js is a js script to prevent the website from detecting the crawler.
-                await self.browser_context.add_init_script(path="libs/stealth.min.js")
+                self.browser_context = await self.launch_browser(
+                    chromium, None, self.user_agent, headless=_use_headless
+                )
+            # stealth.min.js is a js script to prevent the website from detecting the crawler.
+            await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
             # Close blank default pages from browser startup
             for _p in self.browser_context.pages:

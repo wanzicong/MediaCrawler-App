@@ -73,28 +73,26 @@ class DouYinCrawler(AbstractCrawler):
             playwright_proxy_format, httpx_proxy_format = utils.format_proxy_info(ip_proxy_info)
 
         async with async_playwright() as playwright:
-            # Select startup mode based on configuration
-            if config.ENABLE_CDP_MODE:
+            # headless 时优先使用 Playwright 原生 headless（最可靠），非 headless 时用 CDP
+            _use_headless = config.CDP_HEADLESS or config.HEADLESS
+            if config.ENABLE_CDP_MODE and not _use_headless:
                 utils.logger.info("[DouYinCrawler] 使用CDP模式启动浏览器")
                 self.browser_context = await self.launch_browser_with_cdp(
                     playwright,
                     playwright_proxy_format,
                     None,
-                    headless=config.CDP_HEADLESS,
+                    headless=False,
                 )
-                await self.browser_context.add_init_script(path="libs/stealth.min.js")
             else:
-                utils.logger.info("[DouYinCrawler] 使用标准模式启动浏览器")
-                # Launch a browser context.
+                utils.logger.info(f"[DouYinCrawler] 使用标准模式启动浏览器 (headless={_use_headless})")
                 chromium = playwright.chromium
                 self.browser_context = await self.launch_browser(
                     chromium,
                     playwright_proxy_format,
                     user_agent=None,
-                    headless=config.HEADLESS,
+                    headless=_use_headless,
                 )
-                # stealth.min.js is a js script to prevent the website from detecting the crawler.
-                await self.browser_context.add_init_script(path="libs/stealth.min.js")
+            await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
             # Close blank default pages from browser startup
             for _p in self.browser_context.pages:

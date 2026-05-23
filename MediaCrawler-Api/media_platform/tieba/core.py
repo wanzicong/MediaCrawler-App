@@ -81,26 +81,26 @@ class TieBaCrawler(AbstractCrawler):
             )
 
         async with async_playwright() as playwright:
-            # Choose startup mode based on configuration
-            if config.ENABLE_CDP_MODE:
+            # headless 时优先使用 Playwright 原生 headless（最可靠），非 headless 时用 CDP
+            _use_headless = config.CDP_HEADLESS or config.HEADLESS
+            if config.ENABLE_CDP_MODE and not _use_headless:
                 utils.logger.info("[BaiduTieBaCrawler] Launching browser in CDP mode")
                 self.browser_context = await self.launch_browser_with_cdp(
                     playwright,
                     playwright_proxy_format,
                     self.user_agent,
-                    headless=config.CDP_HEADLESS,
+                    headless=False,
                 )
-                await self.browser_context.add_init_script(path="libs/stealth.min.js")
             else:
-                utils.logger.info("[BaiduTieBaCrawler] Launching browser in standard mode")
-                # Launch a browser context.
+                utils.logger.info(f"[BaiduTieBaCrawler] Launching browser standard mode (headless={_use_headless})")
                 chromium = playwright.chromium
                 self.browser_context = await self.launch_browser(
                     chromium,
                     playwright_proxy_format,
                     self.user_agent,
-                    headless=config.HEADLESS,
+                    headless=_use_headless,
                 )
+            await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
             # Inject anti-detection scripts - for Baidu's special detection
             await self._inject_anti_detection_scripts()

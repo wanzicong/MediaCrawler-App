@@ -84,8 +84,26 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         # Check if proxy has expired before each request
         await self._refresh_proxy_if_expired()
 
-        client = self._get_client()
-        response = await client.request(method, url, timeout=self.timeout, **kwargs)
+        max_retries = 2
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                client = self._get_client()
+                response = await client.request(method, url, timeout=self.timeout, **kwargs)
+                break
+            except httpx.ConnectError as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    utils.logger.warning(
+                        f"[BilibiliClient.request] Connection failed, recreating client and retrying... ({attempt + 1}/{max_retries})"
+                    )
+                    await self.close_client()
+                    await asyncio.sleep(1)
+                else:
+                    raise DataFetchError(f"Connection failed after {max_retries} attempts: {e}") from e
+            except Exception:
+                # Don't retry other exceptions
+                raise
         try:
             data: Dict = response.json()
         except json.JSONDecodeError:

@@ -25,7 +25,7 @@ import {
   RocketOutlined,
   StarOutlined,
 } from '@ant-design/icons';
-import { useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -81,7 +81,7 @@ export default function KeywordsPage() {
 
   // Fission state
   const [fissionSeed, setFissionSeed] = useState('');
-  const [fissionPlatform, setFissionPlatform] = useState('xhs');
+  const [fissionPlatform, setFissionPlatform] = useState('');
   const [fissionDepth, setFissionDepth] = useState(1);
   const [fissionResult, setFissionResult] = useState<FissionResult | null>(null);
   const [fissionLoading, setFissionLoading] = useState(false);
@@ -132,6 +132,17 @@ export default function KeywordsPage() {
   const platformOptions = (platforms ?? []).length > 0
     ? platforms!.map((p) => ({ value: p.code, label: p.name }))
     : Object.entries(PLATFORM_LABELS).map(([k, v]) => ({ value: k, label: v }));
+
+  // 第一个启用的平台，作为默认选择
+  const defaultPlatform = platforms?.[0]?.code || 'dy';
+  const defaultPlatformName = getPlatformName(defaultPlatform);
+
+  // 裂变平台默认同步为第一个启用的平台
+  useEffect(() => {
+    if (platforms && platforms.length > 0) {
+      setFissionPlatform((prev) => prev || platforms[0].code);
+    }
+  }, [platforms]);
 
   // ── Group Mutations ─────────────────────────────────────────────────
 
@@ -490,7 +501,7 @@ export default function KeywordsPage() {
               onClick={() => {
                 setEditingKeyword(null);
                 form.resetFields();
-                form.setFieldsValue({ platform: 'xhs', group_id: selectedGroup });
+                form.setFieldsValue({ platform: defaultPlatform, group_id: selectedGroup });
                 setKeywordModalOpen(true);
               }}
             >
@@ -499,7 +510,7 @@ export default function KeywordsPage() {
             <Button
               onClick={() => {
                 batchForm.resetFields();
-                batchForm.setFieldsValue({ platform: 'xhs', group_id: selectedGroup });
+                batchForm.setFieldsValue({ platform: defaultPlatform, group_id: selectedGroup });
                 setBatchKeywordModalOpen(true);
               }}
             >
@@ -799,7 +810,7 @@ export default function KeywordsPage() {
           tabBarStyle={{ marginBottom: 0, paddingLeft: 16 }}
           tabBarExtraContent={
             <Space style={{ paddingRight: 16 }}>
-              <Tag color="blue">{getPlatformName('xhs')}</Tag>
+              <Tag color="blue">{defaultPlatformName}</Tag>
             </Space>
           }
         />
@@ -873,7 +884,7 @@ export default function KeywordsPage() {
               options={(groups ?? []).map((g) => ({ value: g.id, label: g.name }))}
             />
           </Form.Item>
-          <Form.Item name="platform" label="平台" initialValue="xhs">
+          <Form.Item name="platform" label="平台" initialValue={defaultPlatform}>
             <Select options={platformOptions} />
           </Form.Item>
           <Form.Item name="notes" label="备注">
@@ -923,7 +934,7 @@ export default function KeywordsPage() {
               options={(groups ?? []).map((g) => ({ value: g.id, label: g.name }))}
             />
           </Form.Item>
-          <Form.Item name="platform" label="平台" initialValue="xhs">
+          <Form.Item name="platform" label="平台" initialValue={defaultPlatform}>
             <Select options={platformOptions} />
           </Form.Item>
         </Form>

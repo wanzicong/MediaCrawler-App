@@ -277,7 +277,9 @@ class CDPBrowserManager:
                 f"cdp_{config.USER_DATA_DIR % config.PLATFORM}",
             )
             os.makedirs(user_data_dir, exist_ok=True)
-            utils.logger.info(f"[CDPBrowserManager] User data directory: {user_data_dir}")
+            utils.logger.info(
+                f"[CDPBrowserManager] User data directory: {user_data_dir} (headless={headless})"
+            )
 
         # Launch browser
         self.launcher.browser_process = self.launcher.launch_browser(

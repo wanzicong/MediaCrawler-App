@@ -59,7 +59,7 @@ export const antdTheme: ThemeConfig = {
       itemHoverColor: SIDEBAR.text,
       itemHoverBg: 'rgba(99, 102, 241, 0.04)',
       itemSelectedBg: 'transparent',
-      itemSelectedColor: 'transparent',
+      itemSelectedColor: SIDEBAR.text,
       itemActiveBg: 'transparent',
       itemBorderRadius: 10,
       itemMarginInline: 10,

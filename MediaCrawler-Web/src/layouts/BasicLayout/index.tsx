@@ -95,9 +95,7 @@ export default function BasicLayout() {
         <span
           className={styles.menuIcon}
           style={{
-            background: `linear-gradient(135deg, ${g.from}, ${g.to})`,
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
+            color: isActive ? g.from : undefined,
             filter: isActive ? `drop-shadow(0 0 8px ${g.from}40)` : undefined,
           }}
         >

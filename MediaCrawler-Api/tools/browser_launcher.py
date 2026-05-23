@@ -147,15 +147,17 @@ class BrowserLauncher:
         # Headless mode
         if headless:
             args.extend([
-                "--headless",  # Chrome 112+ 统一使用 --headless (默认新渲染模式)
+                "--headless",
                 "--disable-gpu",
                 "--hide-scrollbars",
                 "--mute-audio",
-                "--no-startup-window",
-                "--window-size=1920,1080",
+                # 防止从 user_data_dir 恢复之前非 headless 的窗口状态
+                "--disable-restore-session-state",
+                "--disable-features=SessionRestore",
+                "--disable-session-crashed-bubble",
+                # 确保 viewport 大小（不影响窗口可见性）
+                f"--window-size=1920,1080",
             ])
-        else:
-            # Extra arguments for non-headless mode
             args.extend([
                 "--start-maximized",  # Maximize window, more like real user
             ])
