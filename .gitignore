@@ -52,7 +52,6 @@ Thumbs.db
 
 # ==================== 项目特定 ====================
 browser_data/
-cache/
 data/
 !MediaCrawler-Web/src/pages/Data/
 temp_image/
