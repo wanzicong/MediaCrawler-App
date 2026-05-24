@@ -6,6 +6,17 @@ export function isImageUrl(s: string): boolean {
   return s.startsWith('http://') || s.startsWith('https://') || s.startsWith('//');
 }
 
+/** 将 HTTP 图片链接升级为 HTTPS，避免浏览器阻止混合内容或 CDN 防盗链 */
+export function normalizeImageUrl(url: string): string {
+  if (url.startsWith('http://')) {
+    return url.replace('http://', 'https://');
+  }
+  if (url.startsWith('//')) {
+    return `https:${url}`;
+  }
+  return url;
+}
+
 export function formatText(key: string, v: unknown): string {
   if (v == null) return '—';
   if (typeof v === 'string' && TS_FIELDS.has(key)) {

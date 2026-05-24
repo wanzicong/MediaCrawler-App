@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  MediaCrawler-Api:
+  Crawler-Service:
     devDependencies:
       mermaid:
         specifier: ^11.12.2

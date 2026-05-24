@@ -202,7 +202,7 @@ export default function BasicLayout() {
             </span>
           </div>
         </Header>
-        <Content className={styles.content}>
+        <Content className={styles.content} id="page-scroll-container">
           <div key={location.pathname} className="page-transition">
             <Outlet />
           </div>

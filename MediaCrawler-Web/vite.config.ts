@@ -5,6 +5,7 @@ import path from 'node:path';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8080';
+  const crawlerTarget = env.VITE_CRAWLER_PROXY_TARGET || 'http://127.0.0.1:8081';
 
   return {
     plugins: [react()],
@@ -22,8 +23,18 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: true,
-      port: 5173,
+      port: 10001,
       proxy: {
+        '/api/crawler': {
+          target: crawlerTarget,
+          changeOrigin: true,
+          ws: true,
+        },
+        '/api/ws': {
+          target: crawlerTarget,
+          changeOrigin: true,
+          ws: true,
+        },
         '/api': {
           target: apiTarget,
           changeOrigin: true,

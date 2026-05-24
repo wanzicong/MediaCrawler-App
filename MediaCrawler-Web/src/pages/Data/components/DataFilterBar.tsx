@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Button, Input, Select, Space, Tag } from 'antd';
+import { SortAscendingOutlined } from '@ant-design/icons';
 
 interface KindOption {
   value: string;
@@ -7,6 +8,11 @@ interface KindOption {
 }
 
 interface PlatformOption {
+  value: string;
+  label: string;
+}
+
+export interface SortOption {
   value: string;
   label: string;
 }
@@ -19,11 +25,16 @@ interface Props {
   keyword: string;
   dataTotal?: number;
   hasFilters: boolean;
+  sortOptions: SortOption[];
+  orderBy?: string;
+  orderDirection?: string;
   onPlatformChange: (v: string) => void;
   onKindChange: (v: string) => void;
   onKeywordChange: (v: string) => void;
   onSearch: (v: string) => void;
   onClearFilters: () => void;
+  onOrderByChange?: (v: string) => void;
+  onOrderDirectionChange?: (v: string) => void;
 }
 
 export default function DataFilterBar({
@@ -34,11 +45,16 @@ export default function DataFilterBar({
   keyword,
   dataTotal,
   hasFilters,
+  sortOptions,
+  orderBy,
+  orderDirection,
   onPlatformChange,
   onKindChange,
   onKeywordChange,
   onSearch,
   onClearFilters,
+  onOrderByChange,
+  onOrderDirectionChange,
 }: Props) {
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -78,6 +94,29 @@ export default function DataFilterBar({
         onChange={(e) => onKeywordChange(e.target.value)}
         onSearch={onSearch}
       />
+      {sortOptions.length > 0 && kind === 'contents' && (
+        <>
+          <Select
+            style={{ width: 120 }}
+            placeholder="排序字段"
+            allowClear
+            value={orderBy}
+            options={sortOptions}
+            onChange={(v) => onOrderByChange?.(v ?? '')}
+          />
+          {orderBy && (
+            <Select
+              style={{ width: 90 }}
+              value={orderDirection ?? 'desc'}
+              options={[
+                { value: 'desc', label: '降序' },
+                { value: 'asc', label: '升序' },
+              ]}
+              onChange={(v) => onOrderDirectionChange?.(v)}
+            />
+          )}
+        </>
+      )}
       {dataTotal != null && (
         <Tag color="blue">共 {dataTotal} 条</Tag>
       )}

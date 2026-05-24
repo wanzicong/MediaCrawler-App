@@ -3,6 +3,7 @@ import {
   App,
   Button,
   Card,
+  FloatButton,
   Image,
   Modal,
   Space,
@@ -10,7 +11,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { BarChartOutlined, DeleteOutlined, EyeOutlined, SearchOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, BarChartOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, UnorderedListOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -24,7 +25,7 @@ import {
 } from '@/api';
 import { analyzeComments, type AnalyzeResponse } from '@/api/modules/ai';
 import PageHeader from '@/components/PageHeader';
-import { isImageUrl, formatText } from '@/utils/format';
+import { isImageUrl, formatText, normalizeImageUrl } from '@/utils/format';
 import {
   IMPORTANT_FIELDS,
   FIELD_LABELS,
@@ -37,6 +38,7 @@ import { fetchEnabledPlatforms } from '@/api/modules/platforms';
 import DataFilterBar from './components/DataFilterBar';
 import DataFilterAlerts from './components/DataFilterAlerts';
 import DataTable from './components/DataTable';
+import DataCardView from './components/DataCardView';
 import DataDetailModal from './components/DataDetailModal';
 import AnalysisResultCard from './AnalysisResultCard';
 
@@ -61,6 +63,47 @@ export default function DataPage() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [commentModalCid, setCommentModalCid] = useState<string | null>(null);
   const [commentModalPage, setCommentModalPage] = useState(1);
+  const [orderBy, setOrderBy] = useState('');
+  const [orderDirection, setOrderDirection] = useState('desc');
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('card');
+  const [pageSize, setPageSize] = useState(20);
+
+  // 视频类平台支持的排序字段
+  const videoSortOptions = useMemo(() => {
+    const fields: Record<string, { value: string; label: string }[]> = {
+      bili: [
+        { value: 'video_play_count', label: '播放量' },
+        { value: 'video_comment', label: '评论数' },
+        { value: 'liked_count', label: '点赞数' },
+      ],
+      dy: [
+        { value: 'viewd_count', label: '播放量' },
+        { value: 'comment_count', label: '评论数' },
+        { value: 'liked_count', label: '点赞数' },
+      ],
+      ks: [
+        { value: 'video_play_count', label: '播放量' },
+        { value: 'video_comment', label: '评论数' },
+        { value: 'liked_count', label: '点赞数' },
+      ],
+    };
+    return fields[platform] ?? [];
+  }, [platform]);
+
+  // 切换平台/类型时重置排序
+  const handlePlatformChange = useCallback((v: string) => {
+    setPlatform(v);
+    setOrderBy('');
+    setOrderDirection('desc');
+    setPage(1);
+  }, []);
+
+  const handleKindChange = useCallback((v: string) => {
+    setKind(v);
+    setOrderBy('');
+    setOrderDirection('desc');
+    setPage(1);
+  }, []);
 
   const { data: platformMeta } = useQuery({
     queryKey: ['db-platforms'],
@@ -94,18 +137,18 @@ export default function DataPage() {
   }, [platformMeta, platform]);
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['db-data', platform, kind, page, searchKeyword, filterTaskId, filterContentId],
+    queryKey: ['db-data', platform, kind, page, pageSize, searchKeyword, filterTaskId, filterContentId, orderBy, orderDirection],
     queryFn: () => {
       if (filterTaskId) {
-        return fetchTaskData(platform, Number(filterTaskId), { page, page_size: 20 });
+        return fetchTaskData(platform, Number(filterTaskId), { page, page_size: pageSize });
       }
       if (filterContentId && kind === 'comments') {
-        return fetchContentComments(platform, filterContentId, { page, page_size: 20 });
+        return fetchContentComments(platform, filterContentId, { page, page_size: pageSize });
       }
       if (filterContentId && kind === 'contents') {
-        return fetchDbData(platform, kind, { page, page_size: 20, content_id: filterContentId });
+        return fetchDbData(platform, kind, { page, page_size: pageSize, content_id: filterContentId, order_by: orderBy || undefined, order_direction: orderDirection });
       }
-      return fetchDbData(platform, kind, { page, page_size: 20, keyword: searchKeyword || undefined });
+      return fetchDbData(platform, kind, { page, page_size: pageSize, keyword: searchKeyword || undefined, order_by: orderBy || undefined, order_direction: orderDirection });
     },
     placeholderData: keepPreviousData,
     retry: false,
@@ -176,11 +219,12 @@ export default function DataPage() {
           if (firstUrl && isImageUrl(firstUrl)) {
             return (
               <Image
-                src={firstUrl}
+                src={normalizeImageUrl(firstUrl)}
                 width={32}
                 height={32}
                 style={{ borderRadius: 4, objectFit: 'cover' }}
                 preview={{ mask: null }}
+                referrerPolicy="no-referrer"
                 fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSIxNiIgZmlsbD0iI0UyRThGMCIvPjwvc3ZnPg=="
               />
             );
@@ -191,11 +235,12 @@ export default function DataPage() {
         if (IMAGE_FIELDS.has(field) && isImageUrl(s)) {
           return (
             <Image
-              src={s}
+              src={normalizeImageUrl(s)}
               width={32}
               height={32}
               style={{ borderRadius: 20, objectFit: 'cover' }}
               preview={{ mask: null }}
+              referrerPolicy="no-referrer"
               fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSIxNiIgZmlsbD0iI0UyRThGMCIvPjwvc3ZnPg=="
             />
           );
@@ -290,10 +335,11 @@ export default function DataPage() {
             {urls.map((url, i) => (
               <Image
                 key={i}
-                src={url}
+                src={normalizeImageUrl(url)}
                 width={80}
                 height={80}
                 style={{ borderRadius: 8, objectFit: 'cover' }}
+                referrerPolicy="no-referrer"
                 fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAiIGhlaWdodD0iODAiIHJ4PSI4IiBmaWxsPSIjRTJFOEYwIi8+PC9zdmc+"
               />
             ))}
@@ -303,7 +349,7 @@ export default function DataPage() {
     }
 
     if (IMAGE_FIELDS.has(key) && isImageUrl(s)) {
-      return <Image src={s} width={80} height={80} style={{ borderRadius: 8, objectFit: 'cover' }} />;
+      return <Image src={normalizeImageUrl(s)} width={80} height={80} style={{ borderRadius: 8, objectFit: 'cover' }} referrerPolicy="no-referrer" />;
     }
     if (isImageUrl(s)) {
       return (
@@ -358,11 +404,16 @@ export default function DataPage() {
           keyword={keyword}
           dataTotal={data?.total}
           hasFilters={!!(filterTaskId || filterContentId)}
-          onPlatformChange={setPlatform}
-          onKindChange={setKind}
+          sortOptions={videoSortOptions}
+          orderBy={orderBy}
+          orderDirection={orderDirection}
+          onPlatformChange={handlePlatformChange}
+          onKindChange={handleKindChange}
           onKeywordChange={setKeyword}
           onSearch={handleSearch}
           onClearFilters={handleClearFilters}
+          onOrderByChange={setOrderBy}
+          onOrderDirectionChange={setOrderDirection}
         />
 
         <DataFilterAlerts
@@ -375,18 +426,59 @@ export default function DataPage() {
           onClear={handleClearFilters}
         />
 
-        <DataTable
-          columns={columns}
-          dataSource={data?.items ?? []}
-          isLoading={isLoading}
-          isError={isError}
-          error={error as Error | null}
-          page={page}
-          pageSize={data?.page_size ?? 20}
-          total={data?.total ?? 0}
-          onPageChange={setPage}
-          onRowClick={setDetailRow}
-        />
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button.Group>
+            <Button
+              type={viewMode === 'table' ? 'primary' : 'default'}
+              icon={<UnorderedListOutlined />}
+              onClick={() => setViewMode('table')}
+            >
+              列表
+            </Button>
+            <Button
+              type={viewMode === 'card' ? 'primary' : 'default'}
+              icon={<AppstoreOutlined />}
+              onClick={() => setViewMode('card')}
+            >
+              卡片
+            </Button>
+          </Button.Group>
+        </div>
+
+        {viewMode === 'table' ? (
+          <DataTable
+            columns={columns}
+            dataSource={data?.items ?? []}
+            isLoading={isLoading}
+            isError={isError}
+            error={error as Error | null}
+            page={page}
+            pageSize={data?.page_size ?? pageSize}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            onRowClick={setDetailRow}
+          />
+        ) : (
+          <DataCardView
+            dataSource={data?.items ?? []}
+            isLoading={isLoading}
+            isError={isError}
+            error={error as Error | null}
+            platform={platform}
+            kind={kind}
+            page={page}
+            pageSize={data?.page_size ?? pageSize}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            onCardClick={setDetailRow}
+            onViewComments={(cid) => {
+              setCommentModalCid(cid);
+              setCommentModalPage(1);
+            }}
+          />
+        )}
 
         <DataDetailModal
           detailRow={detailRow}
@@ -461,6 +553,24 @@ export default function DataPage() {
           {analysisResult && <AnalysisResultCard result={analysisResult} />}
         </Modal>
       </Card>
+
+      <FloatButton.Group>
+        <FloatButton
+          icon={<VerticalAlignTopOutlined />}
+          tooltip="回到顶部"
+          onClick={() => {
+            document.getElementById('page-scroll-container')?.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+        <FloatButton
+          icon={<VerticalAlignBottomOutlined />}
+          tooltip="回到底部"
+          onClick={() => {
+            const el = document.getElementById('page-scroll-container');
+            if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+          }}
+        />
+      </FloatButton.Group>
     </>
   );
 }

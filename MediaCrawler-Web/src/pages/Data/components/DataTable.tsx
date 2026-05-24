@@ -11,6 +11,7 @@ interface Props {
   pageSize: number;
   total: number;
   onPageChange: (p: number) => void;
+  onPageSizeChange?: (size: number) => void;
   onRowClick: (row: Record<string, unknown>) => void;
 }
 
@@ -24,6 +25,7 @@ export default function DataTable({
   pageSize,
   total,
   onPageChange,
+  onPageSizeChange,
   onRowClick,
 }: Props) {
   if (isLoading) {
@@ -56,9 +58,14 @@ export default function DataTable({
         current: page,
         pageSize,
         total,
-        showSizeChanger: false,
+        showSizeChanger: true,
+        pageSizeOptions: ['10', '20', '50', '100', '200'],
         showTotal: (t) => `共 ${t} 条`,
         onChange: onPageChange,
+        onShowSizeChange: (_current, size) => {
+          onPageSizeChange?.(size);
+          onPageChange(1);
+        },
       }}
       onRow={(r) => ({
         onClick: () => onRowClick(r),
