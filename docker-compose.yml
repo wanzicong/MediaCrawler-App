@@ -1,7 +1,14 @@
-# MediaCrawler 本地 MySQL（root / 123456）
-# 管理命令见根目录 package.json：pnpm db:up / db:down / db:reset
+# ==========================================
+# MediaCrawler Docker Compose 编排
+# ==========================================
+# 启动全部:  docker compose --env-file .env.docker up -d
+# 停止全部:  docker compose down
+# 重建某服务: docker compose up -d --build crawler
+# ==========================================
 
 services:
+  # ==================== 基础设施 ====================
+
   mysql:
     image: mysql:8.0
     container_name: mediacrawler-mysql
@@ -9,8 +16,8 @@ services:
     ports:
       - '${MYSQL_HOST_PORT:-3306}:3306'
     environment:
-      MYSQL_ROOT_PASSWORD: '123456'
-      MYSQL_DATABASE: media_crawler
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-media_crawler}
       TZ: Asia/Shanghai
     volumes:
       - mediacrawler_mysql_data:/var/lib/mysql
@@ -20,11 +27,125 @@ services:
       - --collation-server=utf8mb4_unicode_ci
       - --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-uroot', '-p123456']
+      test:
+        [
+          'CMD',
+          'mysqladmin',
+          'ping',
+          '-h',
+          '127.0.0.1',
+          '-uroot',
+          '-p${MYSQL_ROOT_PASSWORD:-123456}',
+        ]
       interval: 5s
       timeout: 5s
       retries: 30
       start_period: 30s
+    networks:
+      - mediacrawler-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: mediacrawler-redis
+    restart: unless-stopped
+    ports:
+      - '${REDIS_HOST_PORT:-6379}:6379'
+    command: redis-server --requirepass ${REDIS_PASSWORD:-123456} --appendonly yes
+    volumes:
+      - mediacrawler_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-123456}', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mediacrawler-net
+
+  # ==================== 后端服务 ====================
+
+  data-api:
+    build: ./Data-API-Service
+    container_name: mediacrawler-data-api
+    restart: unless-stopped
+    ports:
+      - '${DATA_API_PORT:-8080}:8080'
+    environment:
+      # MySQL
+      MYSQL_DB_HOST: mysql
+      MYSQL_DB_PORT: 3306
+      MYSQL_DB_USER: root
+      MYSQL_DB_PWD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DB_NAME: ${MYSQL_DATABASE:-media_crawler}
+      # Redis（可选）
+      REDIS_DB_HOST: redis
+      REDIS_DB_PORT: 6379
+      REDIS_DB_PWD: ${REDIS_PASSWORD:-123456}
+      REDIS_DB_NUM: 0
+      # 其他
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mediacrawler-net
+
+  crawler:
+    build: ./Crawler-Service
+    container_name: mediacrawler-crawler
+    restart: unless-stopped
+    ports:
+      - '${CRAWLER_PORT:-8081}:8081'
+    environment:
+      # 服务间通信
+      DATA_API_URL: http://data-api:8080
+      # Redis 缓存（默认关闭，需要时设置 CACHE_TYPE_REDIS_ENABLED=1）
+      REDIS_DB_HOST: redis
+      REDIS_DB_PORT: 6379
+      REDIS_DB_PWD: ${REDIS_PASSWORD:-123456}
+      REDIS_DB_NUM: 0
+      CACHE_TYPE_REDIS_ENABLED: 0
+      # CDP 模式配置
+      ENABLE_CDP_MODE: ${ENABLE_CDP_MODE:-True}
+      CDP_HEADLESS: ${CDP_HEADLESS:-True}
+      # 其他
+      TZ: Asia/Shanghai
+      PYTHONUNBUFFERED: 1
+    # Chrome 需要较大的共享内存
+    shm_size: '2gb'
+    # 持久化浏览器登录状态
+    volumes:
+      - mediacrawler_browser_data:/app/browser_data
+    depends_on:
+      data-api:
+        condition: service_started
+    networks:
+      - mediacrawler-net
+
+  # ==================== 前端 ====================
+
+  web:
+    build: ./MediaCrawler-Web
+    container_name: mediacrawler-web
+    restart: unless-stopped
+    ports:
+      - '${WEB_PORT:-10001}:80'
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - data-api
+      - crawler
+    networks:
+      - mediacrawler-net
+
+# ==================== 网络与存储 ====================
+
+networks:
+  mediacrawler-net:
+    driver: bridge
 
 volumes:
   mediacrawler_mysql_data:
+  mediacrawler_redis_data:
+  mediacrawler_browser_data:

@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+
+# IDE
+.idea/
+.vscode/
+
+# Env
+.env
+.env.local
+
+# Git
+.git/
+.gitignore
+
+# 浏览器数据（运行时挂载 volume 即可）
+browser_data/
