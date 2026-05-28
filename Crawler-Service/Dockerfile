@@ -8,7 +8,7 @@ WORKDIR /app
 # 安装 uv
 RUN pip install --no-cache-dir uv
 
-# 安装系统依赖：Playwright 浏览器 + Chrome + 中文字体 + C 编译器
+# 安装系统依赖：Playwright 浏览器 + Chrome + 中文字体 + C 编译器 + opencv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # C 编译器（cffi 等需要从源码编译）
     build-essential \
@@ -17,10 +17,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libu2f-udev \
     libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 \
     xdg-utils \
+    # opencv-python 运行时依赖
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
     # Chrome 安装工具
     wget gnupg ca-certificates \
     # 中文字体（词云生成）
     fonts-wqy-zenhei fonts-wqy-microhei \
+    # Node.js（execjs 需要 JavaScript 运行时，用于抖音等平台签名）
+    nodejs \
+    # 虚拟显示器（Chrome 非无头模式需要）
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 Google Chrome Stable（CDP 模式需要真实 Chrome）
@@ -45,4 +51,8 @@ ENV PYTHONPATH=.
 
 EXPOSE 8081
 
-CMD ["uv", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8081"]
+# 虚拟显示器（Chrome 非无头模式需要）
+ENV DISPLAY=:99
+
+# 启动 Xvfb 虚拟显示器，然后启动 uvicorn
+CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 -ac +extension RANDR & uv run uvicorn api.main:app --host 0.0.0.0 --port 8081"]
