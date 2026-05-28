@@ -49,16 +49,23 @@ class HttpStore(AbstractStore):
             return
         client = self._get_client()
         task_id = self._get_task_id()
-        resp = await client.post(
-            f"{DATA_API_URL}/api/internal/data/batch",
-            json={
-                "platform": self.platform,
-                "kind": kind,
-                "task_id": task_id,
-                "records": records,
-            },
-        )
-        resp.raise_for_status()
+        try:
+            resp = await client.post(
+                f"{DATA_API_URL}/api/internal/data/batch",
+                json={
+                    "platform": self.platform,
+                    "kind": kind,
+                    "task_id": task_id,
+                    "records": records,
+                },
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            from tools import utils
+            utils.logger.warning(
+                f"[HttpStore._batch_store] Data API returned {e.response.status_code} "
+                f"for {self.platform}/{kind}: {e.response.text[:200]}"
+            )
 
     async def flush_all(self, items_by_kind: dict[str, list[Dict]]):
         """批量 flush，每个 kind 发送一次 HTTP 请求"""

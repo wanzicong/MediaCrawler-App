@@ -93,10 +93,10 @@ class XiaoHongShuCrawler(AbstractCrawler):
             await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
             # Close blank default pages from browser startup
-            for _p in self.browser_context.pages:
-                await _p.close()
-
+            existing_pages = list(self.browser_context.pages)
             self.context_page = await self.browser_context.new_page()
+            for _p in existing_pages:
+                await _p.close()
             await self.context_page.goto(self.index_url)
 
             # Create a client to interact with the Xiaohongshu website.

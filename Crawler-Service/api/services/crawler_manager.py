@@ -335,7 +335,9 @@ class CrawlerManager:
 
     def _build_command(self, task_id: int) -> list:
         """通过 task_id 从 MySQL 加载配置并启动爬虫"""
-        return ["uv", "run", "python", "main.py", "--task-id", str(task_id)]
+        import sys as _sys
+        python_exe = _sys.executable  # 使用当前 Python 解释器路径
+        return [python_exe, "main.py", "--task-id", str(task_id)]
 
     async def _dequeue_next(self):
         """Start next queued task if any"""

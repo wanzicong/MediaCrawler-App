@@ -106,10 +106,10 @@ class TieBaCrawler(AbstractCrawler):
             await self._inject_anti_detection_scripts()
 
             # Close blank default pages from browser startup
-            for _p in self.browser_context.pages:
-                await _p.close()
-
+            existing_pages = list(self.browser_context.pages)
             self.context_page = await self.browser_context.new_page()
+            for _p in existing_pages:
+                await _p.close()
 
             # First visit Baidu homepage, then click Tieba link to avoid triggering security verification
             await self._navigate_to_tieba_via_baidu()

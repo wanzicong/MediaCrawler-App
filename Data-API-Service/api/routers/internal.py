@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 
 from database.db_session import get_mysql_session
 from database.models import (
@@ -149,13 +150,14 @@ async def batch_write_data(body: BatchDataRequest):
     written = 0
 
     try:
+        from sqlalchemy.dialects.mysql import insert as mysql_insert
         async with get_mysql_session() as session:
             for rec in body.records:
                 rec.setdefault("task_id", body.task_id)
                 rec.setdefault("add_ts", now_ts)
                 rec.setdefault("last_modify_ts", now_ts)
-                obj = model(**rec)
-                session.add(obj)
+                stmt = mysql_insert(model).values(**rec).prefix_with("IGNORE")
+                await session.execute(stmt)
                 written += 1
         return {"written": written, "message": f"successfully wrote {written} records"}
     except Exception as e:
