@@ -11,6 +11,9 @@ import {
   RobotOutlined,
   SettingOutlined,
   TagsOutlined,
+  CrownOutlined,
+  MessageOutlined,
+  SendOutlined,
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { Breadcrumb, Drawer, Layout, Menu, Typography } from 'antd';
@@ -31,6 +34,9 @@ const menuGradients: Record<string, { from: string; to: string; bg: string }> = 
   '/crawler':   { from: '#3B82F6', to: '#2563EB', bg: 'linear-gradient(135deg, #EFF6FF, #F5F9FF)' },
   '/data':      { from: '#06B6D4', to: '#0891B2', bg: 'linear-gradient(135deg, #ECFEFF, #F0FDFF)' },
   '/ai-chat':   { from: '#EC4899', to: '#DB2777', bg: 'linear-gradient(135deg, #FDF2F8, #FFF5FA)' },
+  '/pro':       { from: '#F59E0B', to: '#D97706', bg: 'linear-gradient(135deg, #FFFBEB, #FFFDF5)' },
+  '/comments':  { from: '#14B8A6', to: '#0D9488', bg: 'linear-gradient(135deg, #F0FDFA, #F5FFFD)' },
+  '/pipelines': { from: '#6366F1', to: '#4F46E5', bg: 'linear-gradient(135deg, #EEF2FF, #F5F7FF)' },
 };
 
 const menuItemDefs = [
@@ -40,6 +46,9 @@ const menuItemDefs = [
   { key: '/crawler',   icon: <RocketOutlined />,       label: '爬虫任务' },
   { key: '/data',      icon: <DatabaseOutlined />,     label: '数据中心' },
   { key: '/ai-chat',   icon: <RobotOutlined />,        label: 'AI 对话' },
+  { key: '/pro',       icon: <CrownOutlined />,        label: 'Pro 功能' },
+  { key: '/comments',  icon: <MessageOutlined />,     label: '评论爬取' },
+  { key: '/pipelines', icon: <SendOutlined />,        label: '任务管道' },
 ];
 
 const breadcrumbMap: Record<string, string> = {
@@ -49,6 +58,9 @@ const breadcrumbMap: Record<string, string> = {
   '/crawler': '爬虫任务',
   '/data': '数据中心',
   '/ai-chat': 'AI 对话',
+  '/pro': 'Pro 功能',
+  '/comments': '评论爬取',
+  '/pipelines': '任务管道',
 };
 
 const titleMap: Record<string, string> = {
@@ -58,6 +70,9 @@ const titleMap: Record<string, string> = {
   '/crawler': `爬虫任务 | ${APP_TITLE}`,
   '/data': `数据中心 | ${APP_TITLE}`,
   '/ai-chat': `AI 对话 | ${APP_TITLE}`,
+  '/pro': `Pro 功能 | ${APP_TITLE}`,
+  '/comments': `评论爬取 | ${APP_TITLE}`,
+  '/pipelines': `任务管道 | ${APP_TITLE}`,
 };
 
 export default function BasicLayout() {

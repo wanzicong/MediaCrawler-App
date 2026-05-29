@@ -1,0 +1,11 @@
+[project]
+name = "signer-service"
+version = "1.0.0"
+description = "MediaCrawler Pro 签名微服务"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-dotenv>=1.1.0",
+    "httpx>=0.28.0",
+]

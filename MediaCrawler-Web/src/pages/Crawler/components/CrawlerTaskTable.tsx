@@ -5,7 +5,7 @@ import {
   Table,
   Tag,
 } from 'antd';
-import { ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
+import { ReloadOutlined, DeleteOutlined, StopOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
 
@@ -33,6 +33,8 @@ interface Props {
   onRerun: (taskId: number) => void;
   onDelete: (taskId: number) => void;
   onRefresh: () => void;
+  onStop?: () => void;
+  stopPending?: boolean;
 }
 
 export default function CrawlerTaskTable({
@@ -50,6 +52,8 @@ export default function CrawlerTaskTable({
   onRerun,
   onDelete,
   onRefresh,
+  onStop,
+  stopPending,
 }: Props) {
   const { data: platforms } = useQuery({
     queryKey: ['platforms', 'enabled'],
@@ -124,6 +128,21 @@ export default function CrawlerTaskTable({
           >
             详情
           </Button>
+          {r.status === 'running' && onStop && (
+            <Button
+              type="link"
+              danger
+              size="small"
+              icon={<StopOutlined />}
+              loading={stopPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                onStop();
+              }}
+            >
+              停止
+            </Button>
+          )}
           {r.status === 'failed' && (
             <Button
               type="link"

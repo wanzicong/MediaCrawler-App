@@ -1,9 +1,10 @@
-import { Col, Row, Space, Tag, Typography } from 'antd';
+import { Button, Col, Row, Space, Tag, Typography } from 'antd';
 import {
   ApiOutlined,
   CloudServerOutlined,
   DatabaseOutlined,
   RocketOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
 import type { GlobalToken } from 'antd/es/theme/interface';
 import MetricCard from '@/components/MetricCard';
@@ -22,6 +23,8 @@ interface Props {
   statusLoading: boolean;
   initDbMutation: { isPending: boolean; mutate: () => void };
   token: GlobalToken;
+  onStopCrawler?: () => void;
+  stopPending?: boolean;
 }
 
 export default function DashboardMetricCards({
@@ -36,6 +39,8 @@ export default function DashboardMetricCards({
   statusLoading,
   initDbMutation,
   token,
+  onStopCrawler,
+  stopPending,
 }: Props) {
   return (
     <Row gutter={[16, 16]}>
@@ -88,8 +93,26 @@ export default function DashboardMetricCards({
           color={token.colorWarning}
           loading={statusLoading}
           extra={
-            !statusLoading && crawlerStatus?.task_id ? (
-              <Tag color='processing'>任务 #{crawlerStatus.task_id}</Tag>
+            !statusLoading && (crawlerStatus?.task_id || crawlerStatus?.status === 'running') ? (
+              <Space wrap>
+                {crawlerStatus?.task_id && (
+                  <Tag color='processing'>任务 #{crawlerStatus.task_id}</Tag>
+                )}
+                {(crawlerStatus?.status === 'running' || crawlerStatus?.status === 'stopping') && onStopCrawler && (
+                  <Button
+                    danger
+                    size='small'
+                    icon={<StopOutlined />}
+                    loading={stopPending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStopCrawler();
+                    }}
+                  >
+                    停止
+                  </Button>
+                )}
+              </Space>
             ) : null
           }
         />

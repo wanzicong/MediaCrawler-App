@@ -100,6 +100,7 @@ services:
     environment:
       # 服务间通信
       DATA_API_URL: http://data-api:8080
+      SIGNER_SERVICE_URL: http://signer:8082
       # Redis 缓存（默认关闭，需要时设置 CACHE_TYPE_REDIS_ENABLED=1）
       REDIS_DB_HOST: redis
       REDIS_DB_PORT: 6379
@@ -109,6 +110,8 @@ services:
       # CDP 模式配置
       ENABLE_CDP_MODE: ${ENABLE_CDP_MODE:-True}
       CDP_HEADLESS: ${CDP_HEADLESS:-True}
+      # Docker 环境强制无头模式（容器中 Chrome 无法启动非无头窗口）
+      FORCE_CDP_HEADLESS: ${FORCE_CDP_HEADLESS:-True}
       # 其他
       TZ: Asia/Shanghai
       PYTHONUNBUFFERED: 1
@@ -120,6 +123,17 @@ services:
     depends_on:
       data-api:
         condition: service_started
+    networks:
+      - mediacrawler-net
+
+  signer:
+    build: ./Signer-Service
+    container_name: mediacrawler-signer
+    restart: unless-stopped
+    ports:
+      - '${SIGNER_PORT:-8082}:8082'
+    environment:
+      TZ: Asia/Shanghai
     networks:
       - mediacrawler-net
 

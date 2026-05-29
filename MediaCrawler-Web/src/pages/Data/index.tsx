@@ -11,7 +11,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { AppstoreOutlined, BarChartOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, UnorderedListOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, BarChartOutlined, CloudDownloadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, UnorderedListOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -24,6 +24,7 @@ import {
   deleteDataRecord,
 } from '@/api';
 import { analyzeComments, type AnalyzeResponse } from '@/api/modules/ai';
+import { commentAsync } from '@/api/modules/comments';
 import PageHeader from '@/components/PageHeader';
 import { isImageUrl, formatText, normalizeImageUrl } from '@/utils/format';
 import {
@@ -163,6 +164,18 @@ export default function DataPage() {
     },
   });
 
+  const crawlCommentMutation = useMutation({
+    mutationFn: (postId: string) =>
+      commentAsync({ platform, post_id: postId, max_comments: 50, crawl_replies: false }),
+    onSuccess: (res) => {
+      message.success(`评论爬取任务已提交 (ID: ${res.task_id})`);
+    },
+  });
+
+  const handleCrawlComments = useCallback((cid: string) => {
+    crawlCommentMutation.mutate(cid);
+  }, [crawlCommentMutation]);
+
   const abortRef = useRef<AbortController | null>(null);
 
   const handleAnalyzeComments = useCallback(async (contentId: string) => {
@@ -285,6 +298,18 @@ export default function DataPage() {
                   }}
                 >
                   AI 分析
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<CloudDownloadOutlined />}
+                  loading={crawlCommentMutation.isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCrawlComments(cid);
+                  }}
+                >
+                  爬取评论
                 </Button>
               </>
             )}
@@ -477,6 +502,8 @@ export default function DataPage() {
               setCommentModalCid(cid);
               setCommentModalPage(1);
             }}
+            onCrawlComments={handleCrawlComments}
+            crawlPending={crawlCommentMutation.isPending}
           />
         )}
 

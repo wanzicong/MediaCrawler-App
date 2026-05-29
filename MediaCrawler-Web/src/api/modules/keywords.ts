@@ -28,10 +28,17 @@ export interface Keyword {
   updated_at: string;
 }
 
+export interface FissionItem {
+  keyword: string;
+  platform: string;
+  category: string;
+  reason: string;
+}
+
 export interface FissionResult {
   seed_keyword: string;
-  platform: string;
-  generated: Array<{ keyword: string; category: string; reason: string }>;
+  platforms: string[];
+  generated: FissionItem[];
 }
 
 export interface KeywordStats {
@@ -110,6 +117,7 @@ export function batchDeleteKeywords(ids: number[]) {
 export function fissionKeywords(data: {
   seed_keyword: string;
   platform?: string;
+  platforms?: string[];
   depth?: number;
 }) {
   return httpPost<FissionResult>('/api/keywords/fission', data);
@@ -121,6 +129,35 @@ export function batchAcceptFission(data: {
   platform?: string;
 }) {
   return httpPost<{ count: number }>('/api/keywords/batch', data);
+}
+
+// ── Crawler APIs ────────────────────────────────────────────────────────
+
+export interface AutoClassifyResult {
+  keyword_id: number;
+  keyword: string;
+  group_name: string;
+  group_id: number;
+  group_created: boolean;
+}
+
+export interface AutoClassifyBatchResult {
+  total: number;
+  classified: number;
+  failed: number;
+  results: AutoClassifyResult[];
+}
+
+export function runKeyword(keywordId: number) {
+  return httpPost<{ status: string; keyword_id: number; task_id: number }>('/api/keywords/run', { keyword_id: keywordId });
+}
+
+export function autoClassifyKeyword(keywordId: number) {
+  return httpPost<AutoClassifyResult>('/api/keywords/auto-classify', { keyword_id: keywordId });
+}
+
+export function batchAutoClassify(keywordIds: number[]) {
+  return httpPost<AutoClassifyBatchResult>('/api/keywords/auto-classify/batch', { keyword_ids: keywordIds });
 }
 
 // ── Stats APIs ─────────────────────────────────────────────────────────

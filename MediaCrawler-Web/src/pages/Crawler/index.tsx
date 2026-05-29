@@ -293,6 +293,8 @@ export default function CrawlerPage() {
                 onRerun={handleRerun}
                 onDelete={handleDelete}
                 onRefresh={handleRefresh}
+                onStop={() => stopMutation.mutate()}
+                stopPending={stopMutation.isPending}
               />
             ),
           },

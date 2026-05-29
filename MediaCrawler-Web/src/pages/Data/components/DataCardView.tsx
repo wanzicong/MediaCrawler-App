@@ -1,5 +1,5 @@
 import { Button, Card, Col, Empty, Image, Pagination, Row, Skeleton, Typography, Result, Space, Tag } from 'antd';
-import { EyeOutlined, LikeOutlined, PlayCircleOutlined, CommentOutlined } from '@ant-design/icons';
+import { CloudDownloadOutlined, EyeOutlined, LikeOutlined, PlayCircleOutlined, CommentOutlined } from '@ant-design/icons';
 import { CONTENT_ID_FIELDS } from '@/constants';
 import { normalizeImageUrl, isImageUrl } from '@/utils/format';
 import { FIELD_LABELS, IMAGE_FIELDS } from '@/constants';
@@ -18,6 +18,8 @@ interface Props {
   onPageSizeChange?: (size: number) => void;
   onCardClick: (row: Record<string, unknown>) => void;
   onViewComments: (contentId: string) => void;
+  onCrawlComments?: (contentId: string) => void;
+  crawlPending?: boolean;
 }
 
 const COVER_FIELDS = ['video_cover_url', 'cover_url', 'image_list'];
@@ -46,7 +48,7 @@ function getStatValue(row: Record<string, unknown>, fields: string[]): string | 
 }
 
 export default function DataCardView({
-  dataSource, isLoading, isError, error, platform, kind, page, pageSize, total, onPageChange, onPageSizeChange, onCardClick, onViewComments,
+  dataSource, isLoading, isError, error, platform, kind, page, pageSize, total, onPageChange, onPageSizeChange, onCardClick, onViewComments, onCrawlComments, crawlPending,
 }: Props) {
   if (isLoading) {
     return (
@@ -150,6 +152,20 @@ export default function DataCardView({
                     >
                       查看评论
                     </Button>
+                    {onCrawlComments && (
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<CloudDownloadOutlined />}
+                        loading={crawlPending}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCrawlComments(cid);
+                        }}
+                      >
+                        爬取评论
+                      </Button>
+                    )}
                   </div>
                 )}
               </Card>

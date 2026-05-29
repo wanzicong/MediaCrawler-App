@@ -99,6 +99,28 @@ class Keyword(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class CrawlerAccount(Base):
+    """平台账号（多账号管理）"""
+
+    __tablename__ = "crawler_account"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    platform = Column(String(32), nullable=False, index=True, comment="平台代码: xhs/dy/ks/bili/wb/tieba/zhihu")
+    username = Column(String(128), default="", comment="用户名")
+    phone = Column(String(32), default="", comment="手机号")
+    cookies = Column(JSON, default=dict, comment="Cookie 字典")
+    user_agent = Column(String(512), default="", comment="UA")
+    status = Column(String(32), default="active", comment="active/cooling/banned/rate_limited")
+    max_daily_requests = Column(Integer, default=500, comment="每日最大请求数")
+    daily_request_count = Column(Integer, default=0, comment="今日已用请求数")
+    total_request_count = Column(Integer, default=0, comment="累计请求数")
+    cooldown_until = Column(DateTime, nullable=True, comment="冷却结束时间")
+    last_used_at = Column(DateTime, nullable=True, comment="最后使用时间")
+    notes = Column(Text, default="", comment="备注")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Platform(Base):
     """自媒体平台元数据（显示名称、图标、排序、启停）"""
 

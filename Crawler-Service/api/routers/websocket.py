@@ -59,20 +59,40 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-async def log_broadcaster():
-    """Background task: read logs from queue and broadcast"""
-    queue = crawler_manager.get_log_queue()
+async def _read_and_broadcast(queue: asyncio.Queue, label: str):
+    """从单个队列读取日志并广播"""
     while True:
         try:
-            # Get log entry from queue
             entry = await queue.get()
-            # Broadcast to all WebSocket connections
-            await manager.broadcast(entry.model_dump())
+            if hasattr(entry, 'model_dump'):
+                await manager.broadcast(entry.model_dump())
+            elif isinstance(entry, dict):
+                await manager.broadcast(entry)
         except asyncio.CancelledError:
             break
-        except Exception as e:
-            print(f"Log broadcaster error: {e}")
-            await asyncio.sleep(0.1)
+
+
+async def log_broadcaster():
+    """Background task: read logs from both crawler_manager and scheduler queues"""
+    mgr_queue = crawler_manager.get_log_queue()
+
+    # 尝试获取 scheduler 日志队列
+    scheduler_queue = None
+    try:
+        from engine.task_scheduler import scheduler
+        scheduler_queue = scheduler.get_log_queue()
+    except Exception:
+        pass
+
+    tasks = [asyncio.create_task(_read_and_broadcast(mgr_queue, "mgr"))]
+    if scheduler_queue is not None:
+        tasks.append(asyncio.create_task(_read_and_broadcast(scheduler_queue, "scheduler")))
+
+    try:
+        await asyncio.gather(*tasks)
+    except asyncio.CancelledError:
+        for t in tasks:
+            t.cancel()
 
 
 # Global broadcast task

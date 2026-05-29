@@ -114,18 +114,20 @@ class BatchDeleteRequest(BaseModel):
 class FissionRequest(BaseModel):
     seed_keyword: str = Field(..., min_length=1, max_length=128)
     platform: Optional[str] = "xhs"
+    platforms: Optional[list[str]] = []
     depth: Optional[int] = Field(1, ge=1, le=2)
 
 
 class FissionItem(BaseModel):
     keyword: str
+    platform: str
     category: str
     reason: str
 
 
 class FissionResponse(BaseModel):
     seed_keyword: str
-    platform: str
+    platforms: list[str]
     generated: list[FissionItem]
 
 
@@ -150,6 +152,56 @@ class StatsResponse(BaseModel):
     by_group: list[StatsByGroup]
     by_status: list[StatsByStatus]
     top_performing: list[TopPerforming]
+
+
+# ── 自动记录 & AI 分类 模型 ──────────────────────────────────────────
+
+class AutoRecordRequest(BaseModel):
+    """爬虫任务关键词自动记录请求"""
+    platform: str = Field(..., min_length=1, max_length=32)
+    keywords: str = Field(..., min_length=1, description="逗号分隔的关键词字符串")
+    task_id: Optional[int] = None
+
+
+class AutoRecordItem(BaseModel):
+    keyword_id: int
+    keyword: str
+    platform: str
+    action: str  # "created" 或 "updated"
+
+
+class AutoRecordResponse(BaseModel):
+    total: int
+    created: int
+    updated: int
+    items: list[AutoRecordItem]
+
+
+class AutoClassifyRequest(BaseModel):
+    """AI 自动分类请求"""
+    keyword_id: Optional[int] = None
+    keyword: Optional[str] = Field(None, min_length=1, max_length=256)
+
+
+class AutoClassifyResponse(BaseModel):
+    """AI 自动分类结果"""
+    keyword_id: int
+    keyword: str
+    group_name: str
+    group_id: int
+    group_created: bool  # 是否自动创建了新分组
+
+
+class AutoClassifyBatchRequest(BaseModel):
+    """批量 AI 自动分类请求"""
+    keyword_ids: list[int] = Field(..., min_length=1, max_length=200)
+
+
+class AutoClassifyBatchResponse(BaseModel):
+    total: int
+    classified: int
+    failed: int
+    results: list[AutoClassifyResponse]
 
 
 # ── Keyword Group Endpoints ─────────────────────────────────────────
@@ -282,7 +334,10 @@ async def delete_group(group_id: int):
 # ── Keyword Endpoints ───────────────────────────────────────────────
 
 @router.post("", response_model=KeywordOut)
-async def create_keyword(body: KeywordCreate):
+async def create_keyword(
+    body: KeywordCreate,
+    auto_classify: bool = Query(False, description="创建后自动 AI 分类"),
+):
     async with get_mysql_session() as session:
         if body.group_id is not None:
             group = await session.get(KeywordGroup, body.group_id)
@@ -300,9 +355,28 @@ async def create_keyword(body: KeywordCreate):
         await session.flush()
         await session.commit()
 
+        # 自动 AI 分类（不阻塞主流程）
+        classified_group_id = kw.group_id
+        if auto_classify and not kw.group_id:
+            try:
+                api_key = _get_api_key()
+                if api_key:
+                    groups_result = await session.execute(
+                        select(KeywordGroup).order_by(KeywordGroup.sort_order, KeywordGroup.id)
+                    )
+                    groups = groups_result.scalars().all()
+                    groups_list = [
+                        {"id": g.id, "name": g.name, "description": g.description or ""}
+                        for g in groups
+                    ]
+                    classify_result = await _do_classify_keyword(kw, api_key, groups_list)
+                    classified_group_id = classify_result.group_id
+            except Exception:
+                pass  # AI 分类失败不影响关键词创建
+
         return KeywordOut(
             id=kw.id,
-            group_id=kw.group_id,
+            group_id=classified_group_id,
             keyword=kw.keyword,
             platform=kw.platform,
             source=kw.source,
@@ -357,6 +431,160 @@ async def batch_create_keywords(body: KeywordBatchCreate):
 
         await session.commit()
         return created
+
+
+# ── 自动记录 & AI 分类关键词 ───────────────────────────────────────
+
+@router.post("/auto-record", response_model=AutoRecordResponse)
+async def auto_record_keywords(body: AutoRecordRequest):
+    """内部 API: Crawler-Service 启动爬虫时，自动同步关键词到词库"""
+    keyword_list = [kw.strip() for kw in body.keywords.split(",") if kw.strip()]
+    if not keyword_list:
+        return AutoRecordResponse(total=0, created=0, updated=0, items=[])
+
+    created_count = 0
+    updated_count = 0
+    items: list[AutoRecordItem] = []
+
+    async with get_mysql_session() as session:
+        for kw_text in keyword_list:
+            result = await session.execute(
+                select(Keyword).where(
+                    Keyword.keyword == kw_text,
+                    Keyword.platform == body.platform,
+                )
+            )
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                existing.crawled_count = (existing.crawled_count or 0) + 1
+                existing.updated_at = datetime.utcnow()
+                updated_count += 1
+                items.append(AutoRecordItem(
+                    keyword_id=existing.id,
+                    keyword=existing.keyword,
+                    platform=existing.platform,
+                    action="updated",
+                ))
+            else:
+                kw = Keyword(
+                    keyword=kw_text,
+                    platform=body.platform,
+                    source="crawler",
+                )
+                session.add(kw)
+                await session.flush()
+                created_count += 1
+                items.append(AutoRecordItem(
+                    keyword_id=kw.id,
+                    keyword=kw.keyword,
+                    platform=kw.platform,
+                    action="created",
+                ))
+
+        await session.commit()
+
+    return AutoRecordResponse(
+        total=len(keyword_list),
+        created=created_count,
+        updated=updated_count,
+        items=items,
+    )
+
+
+@router.post("/auto-classify", response_model=AutoClassifyResponse)
+async def auto_classify_keyword(body: AutoClassifyRequest):
+    """AI 自动分类关键词: 调用 DeepSeek 判断关键词所属分组，分组不存在则自动创建"""
+    async with get_mysql_session() as session:
+        if body.keyword_id:
+            kw = await session.get(Keyword, body.keyword_id)
+            if not kw:
+                raise HTTPException(404, "关键词不存在")
+        elif body.keyword:
+            result = await session.execute(
+                select(Keyword).where(Keyword.keyword == body.keyword.strip())
+            )
+            kw = result.scalar_one_or_none()
+            if not kw:
+                raise HTTPException(404, f"关键词 '{body.keyword}' 不存在")
+        else:
+            raise HTTPException(400, "请提供 keyword_id 或 keyword")
+
+        groups_result = await session.execute(
+            select(KeywordGroup).order_by(KeywordGroup.sort_order, KeywordGroup.id)
+        )
+        groups = groups_result.scalars().all()
+        groups_list = [
+            {"id": g.id, "name": g.name, "description": g.description or ""}
+            for g in groups
+        ]
+
+    api_key = _get_api_key()
+    if not api_key:
+        raise HTTPException(500, "未配置 DEEPSEEK_API_KEY，请在 .env 中设置")
+
+    try:
+        return await _do_classify_keyword(kw, api_key, groups_list)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"AI 自动分类失败: {str(e)}")
+
+
+@router.post("/auto-classify/batch", response_model=AutoClassifyBatchResponse)
+async def batch_auto_classify(body: AutoClassifyBatchRequest):
+    """批量 AI 自动分类: 对未分组关键词逐个分类，单个失败不影响其他"""
+    async with get_mysql_session() as session:
+        result = await session.execute(
+            select(Keyword).where(
+                Keyword.id.in_(body.keyword_ids),
+                Keyword.group_id.is_(None),
+            )
+        )
+        keywords = result.scalars().all()
+
+    if not keywords:
+        return AutoClassifyBatchResponse(total=0, classified=0, failed=0, results=[])
+
+    api_key = _get_api_key()
+    if not api_key:
+        raise HTTPException(500, "未配置 DEEPSEEK_API_KEY，请在 .env 中设置")
+
+    async with get_mysql_session() as session:
+        groups_result = await session.execute(
+            select(KeywordGroup).order_by(KeywordGroup.sort_order, KeywordGroup.id)
+        )
+        groups = groups_result.scalars().all()
+        groups_list = [
+            {"id": g.id, "name": g.name, "description": g.description or ""}
+            for g in groups
+        ]
+
+    classified = 0
+    failed = 0
+    results: list[AutoClassifyResponse] = []
+
+    for kw in keywords:
+        try:
+            classify_result = await _do_classify_keyword(kw, api_key, groups_list)
+            results.append(classify_result)
+            classified += 1
+        except Exception:
+            failed += 1
+            results.append(AutoClassifyResponse(
+                keyword_id=kw.id,
+                keyword=kw.keyword,
+                group_name="",
+                group_id=0,
+                group_created=False,
+            ))
+
+    return AutoClassifyBatchResponse(
+        total=len(keywords),
+        classified=classified,
+        failed=failed,
+        results=results,
+    )
 
 
 @router.get("", response_model=KeywordListOut)
@@ -547,44 +775,143 @@ def _build_fission_prompt(seed_keyword: str, platform: str, depth: int) -> str:
 - 关键词要符合{platform_name}平台用户的搜索习惯"""
 
 
-@router.post("/fission", response_model=FissionResponse)
-async def fission_keywords(req: FissionRequest):
-    # ── 阶段 1: 检查 API Key ─────────────────────────────────────
-    api_key = _get_api_key()
-    if not api_key:
-        raise HTTPException(500, "未配置 DEEPSEEK_API_KEY，请在 .env 中设置")
+# ── AI 分类 Prompt 构建 ──────────────────────────────────────────────
 
-    # ── 阶段 2: 调用 DeepSeek API（不持有 DB 连接）──────────────
-    prompt = _build_fission_prompt(req.seed_keyword, req.platform or "xhs", req.depth or 1)
+def _build_classify_prompt(keyword: str, groups: list[dict]) -> str:
+    """构建关键词 AI 分类 prompt"""
+    if groups:
+        groups_desc = "\n".join([
+            f"  - ID={g['id']}, 名称: {g['name']}, 描述: {g.get('description', '')}"
+            for g in groups
+        ])
+        groups_instruction = f"""现有分组列表:
+{groups_desc}
 
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        try:
-            resp = await client.post(
-                f"{DEEPSEEK_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "deepseek-chat",
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            ai_text = data["choices"][0]["message"]["content"]
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(e.response.status_code, f"DeepSeek API 错误: {e.response.text}")
-        except Exception as e:
-            raise HTTPException(500, f"请求失败: {str(e)}")
+请判断上述关键词最应该归属哪个现有分组。如果关键词与某个现有分组高度匹配，返回该分组信息。
+如果关键词不属于任何现有分组，请为该关键词建议一个新的分组名称（简洁明了，2-6 个汉字）。"""
+    else:
+        groups_instruction = "目前还没有任何分组，请为该关键词建议一个新的分组名称（简洁明了，2-6 个汉字）。"
 
-    # ── 阶段 3: 解析 JSON ───────────────────────────────────────
+    return f"""你是一个专业的关键词分类助手。请根据关键词的语义和领域，将其归类到最合适的分组中。
+
+关键词: 「{keyword}」
+
+{groups_instruction}
+
+请返回严格的 JSON 格式（只返回 JSON，不要 markdown 代码块，不要任何额外文字）:
+{{
+    "group_name": "分组名称",
+    "is_existing": true,
+    "existing_group_id": null,
+    "reason": "分类理由（简短中文说明）"
+}}
+
+字段说明:
+- group_name: 最终的分组名称（已有分组则用原名，新分组则用建议名称）
+- is_existing: true 表示归类到已有分组，false 表示需要新建分组
+- existing_group_id: 如果 is_existing=true，填写对应分组的数字 ID；否则填 null
+- reason: 简短说明为什么这样分类"""
+
+
+async def _do_classify_keyword(
+    kw,  # Keyword ORM 对象
+    api_key: str,
+    groups: list[dict],
+) -> "AutoClassifyResponse":
+    """对单个关键词执行 AI 分类，返回分类结果。调用方负责传入 keyword、API Key 和分组列表。"""
+    prompt = _build_classify_prompt(kw.keyword, groups)
+
+    # 调用 DeepSeek API
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            f"{DEEPSEEK_BASE_URL}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "deepseek-chat",
+                "messages": [{"role": "user", "content": prompt}],
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        ai_text = data["choices"][0]["message"]["content"]
+
+    # 解析 AI 返回的 JSON
     raw_text = ai_text.strip()
-    # Strip markdown code block if present
     if raw_text.startswith("```"):
         lines = raw_text.split("\n")
         if len(lines) >= 3:
-            lines = lines[1:]  # Remove ```json or ```
+            lines = lines[1:]
+            if lines[-1].strip() == "```":
+                lines = lines[:-1]
+            raw_text = "\n".join(lines)
+
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        raise HTTPException(500, f"AI 返回内容无法解析为 JSON: {ai_text[:500]}")
+
+    group_name = parsed.get("group_name", "").strip()
+    is_existing = parsed.get("is_existing", False)
+    existing_group_id = parsed.get("existing_group_id")
+    reason = parsed.get("reason", "")
+
+    if not group_name:
+        raise HTTPException(500, "AI 未返回有效的分组名称")
+
+    # 查找或创建分组
+    group_created = False
+    async with get_mysql_session() as session:
+        group = None
+
+        # 优先按 ID 查找
+        if is_existing and existing_group_id:
+            group = await session.get(KeywordGroup, existing_group_id)
+
+        # 按名称查找
+        if not group:
+            result = await session.execute(
+                select(KeywordGroup).where(KeywordGroup.name == group_name)
+            )
+            group = result.scalar_one_or_none()
+
+        # 找不到则自动创建新分组
+        if not group:
+            group = KeywordGroup(
+                name=group_name,
+                description=f"AI 自动创建（关键词: {kw.keyword}）" + (f" — {reason}" if reason else ""),
+            )
+            session.add(group)
+            await session.flush()
+            group_created = True
+
+        # 更新关键词的 group_id
+        kw_in_session = await session.get(Keyword, kw.id)
+        if not kw_in_session:
+            raise HTTPException(404, "关键词在分类过程中已被删除")
+        kw_in_session.group_id = group.id
+        kw_in_session.updated_at = datetime.utcnow()
+
+        await session.commit()
+
+        return AutoClassifyResponse(
+            keyword_id=kw.id,
+            keyword=kw.keyword,
+            group_name=group.name,
+            group_id=group.id,
+            group_created=group_created,
+        )
+
+
+def _parse_fission_response(ai_text: str, platform: str) -> list[FissionItem]:
+    """解析 AI 裂变返回的 JSON，生成带平台信息的 FissionItem 列表"""
+    raw_text = ai_text.strip()
+    if raw_text.startswith("```"):
+        lines = raw_text.split("\n")
+        if len(lines) >= 3:
+            lines = lines[1:]
             if lines[-1].strip() == "```":
                 lines = lines[:-1]
             raw_text = "\n".join(lines)
@@ -610,13 +937,241 @@ async def fission_keywords(req: FissionRequest):
         if cat not in valid_categories:
             cat = "long_tail"
 
-        items.append(FissionItem(keyword=kw_text, category=cat, reason=reason_text))
+        items.append(FissionItem(keyword=kw_text, platform=platform, category=cat, reason=reason_text))
+
+    return items
+
+
+@router.post("/fission", response_model=FissionResponse)
+async def fission_keywords(req: FissionRequest):
+    """AI 关键词裂变 — 支持单平台或多平台（全选）"""
+    api_key = _get_api_key()
+    if not api_key:
+        raise HTTPException(500, "未配置 DEEPSEEK_API_KEY，请在 .env 中设置")
+
+    # 确定目标平台列表：platforms 优先，兼容旧 platform 字段
+    if req.platforms:
+        target_platforms = req.platforms
+    else:
+        target_platforms = [req.platform or "xhs"]
+
+    all_items: list[FissionItem] = []
+    seen_keywords: set[str] = set()
+    depth = req.depth or 1
+
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        for platform in target_platforms:
+            prompt = _build_fission_prompt(req.seed_keyword, platform, depth)
+            try:
+                resp = await client.post(
+                    f"{DEEPSEEK_BASE_URL}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "deepseek-chat",
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                ai_text = data["choices"][0]["message"]["content"]
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(e.response.status_code, f"DeepSeek API 错误: {e.response.text}")
+            except Exception as e:
+                raise HTTPException(500, f"请求失败: {str(e)}")
+
+            items = _parse_fission_response(ai_text, platform)
+
+            # 跨平台去重（同关键词只保留第一个平台的）
+            for item in items:
+                if item.keyword not in seen_keywords:
+                    seen_keywords.add(item.keyword)
+                    all_items.append(item)
 
     return FissionResponse(
         seed_keyword=req.seed_keyword,
-        platform=req.platform or "xhs",
-        generated=items,
+        platforms=target_platforms,
+        generated=all_items,
     )
+
+
+# ── 关键词 → 爬虫任务关联 ────────────────────────────────────────────
+
+CRAWLER_SERVICE_URL = os.getenv("CRAWLER_SERVICE_URL", "http://127.0.0.1:8081")
+
+
+class KeywordRunRequest(BaseModel):
+    keyword_id: int
+
+
+class KeywordBatchRunRequest(BaseModel):
+    ids: list[int] = Field(..., min_length=1)
+    mode: Optional[str] = "batch"
+
+
+class StatusSyncRequest(BaseModel):
+    keyword: str
+    platform: str
+    task_id: Optional[int] = None
+    status: Optional[str] = "completed"
+
+
+@router.post("/run")
+async def keyword_run(body: KeywordRunRequest):
+    """一键爬取: 单个关键词 → 创建 Crawler-Service 任务"""
+    async with get_mysql_session() as session:
+        kw = await session.get(Keyword, body.keyword_id)
+        if not kw:
+            raise HTTPException(404, "关键词不存在")
+
+        # 调用 Crawler-Service 启动爬虫
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"{CRAWLER_SERVICE_URL}/api/crawler/start",
+                    json={
+                        "platform": kw.platform,
+                        "keywords": kw.keyword,
+                        "crawler_type": "search",
+                        "save_option": "db",
+                    },
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                task_id = result.get("task_id")
+        except Exception as e:
+            raise HTTPException(500, f"调用 Crawler-Service 失败: {str(e)}")
+
+        # 更新关键词状态
+        kw.status = "crawled"
+        kw.crawled_count = (kw.crawled_count or 0) + 1
+        kw.updated_at = datetime.utcnow()
+        await session.commit()
+
+        return {
+            "status": "ok",
+            "keyword_id": kw.id,
+            "keyword": kw.keyword,
+            "platform": kw.platform,
+            "task_id": task_id,
+        }
+
+
+@router.post("/batch-run")
+async def keywords_batch_run(body: KeywordBatchRunRequest):
+    """批量爬取: 选中关键词 → 创建任务管道"""
+    async with get_mysql_session() as session:
+        result = await session.execute(
+            select(Keyword).where(Keyword.id.in_(body.ids))
+        )
+        keywords = result.scalars().all()
+
+        if not keywords:
+            raise HTTPException(404, "未找到有效关键词")
+
+        # 按平台分组
+        platform_keywords: dict[str, list[str]] = {}
+        for kw in keywords:
+            platform_keywords.setdefault(kw.platform, []).append(kw.keyword)
+
+        # 为每个平台创建一个管道
+        pipelines = []
+        for platform, kw_list in platform_keywords.items():
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(
+                        f"{CRAWLER_SERVICE_URL}/api/crawler-pro/pipelines",
+                        json={
+                            "name": f"批量任务_{datetime.now().strftime('%m%d_%H%M')}",
+                            "platform": platform,
+                            "keywords": kw_list,
+                            "mode": body.mode or "batch",
+                            "config": {"crawler_type": "search", "save_option": "db"},
+                        },
+                    )
+                    if resp.status_code == 200:
+                        pipelines.append(resp.json())
+            except Exception:
+                pass
+
+        # 更新关键词状态
+        for kw in keywords:
+            kw.status = "crawled"
+            kw.crawled_count = (kw.crawled_count or 0) + 1
+            kw.updated_at = datetime.utcnow()
+        await session.commit()
+
+        return {
+            "status": "ok",
+            "total_keywords": len(keywords),
+            "platforms": list(platform_keywords.keys()),
+            "pipelines": pipelines,
+        }
+
+
+@router.get("/{keyword_id}/tasks")
+async def keyword_tasks(keyword_id: int):
+    """查询关键词关联的爬虫任务"""
+    async with get_mysql_session() as session:
+        kw = await session.get(Keyword, keyword_id)
+        if not kw:
+            raise HTTPException(404, "关键词不存在")
+
+        # 通过 payload_snapshot 查询包含该关键词的任务
+        from database.system_models import CrawlerTask
+        try:
+            # JSON_CONTAINS 查询
+            from sqlalchemy import text
+            result = await session.execute(
+                text(
+                    "SELECT id, status, payload_snapshot, created_at, finished_at "
+                    "FROM crawler_task "
+                    "WHERE JSON_EXTRACT(payload_snapshot, '$.keywords') LIKE :kw "
+                    "OR JSON_EXTRACT(payload_snapshot, '$.specific_ids') LIKE :kw2 "
+                    "ORDER BY id DESC LIMIT 20"
+                ),
+                {"kw": f"%{kw.keyword}%", "kw2": f"%{kw.keyword}%"},
+            )
+            rows = result.fetchall()
+            return {
+                "keyword_id": kw.id,
+                "keyword": kw.keyword,
+                "tasks": [
+                    {
+                        "task_id": row[0], "status": row[1],
+                        "created_at": str(row[3]) if row[3] else "",
+                        "finished_at": str(row[4]) if row[4] else "",
+                    }
+                    for row in rows
+                ],
+            }
+        except Exception:
+            return {"keyword_id": kw.id, "keyword": kw.keyword, "tasks": []}
+
+
+@router.post("/status-sync")
+async def sync_keyword_status(body: StatusSyncRequest):
+    """同步关键词状态 (由 PipelineExecutor 调用)"""
+    async with get_mysql_session() as session:
+        result = await session.execute(
+            select(Keyword).where(
+                Keyword.keyword == body.keyword,
+                Keyword.platform == body.platform,
+            )
+        )
+        kw = result.scalar_one_or_none()
+        if kw:
+            if body.status == "completed":
+                kw.status = "has_results"
+            elif body.status == "failed":
+                kw.status = "no_results"
+            kw.crawled_count = (kw.crawled_count or 0) + 1
+            kw.updated_at = datetime.utcnow()
+            await session.commit()
+            return {"status": "ok", "keyword_id": kw.id}
+        return {"status": "ok", "message": "关键词未找到，跳过同步"}
 
 
 # ── Keyword Statistics ──────────────────────────────────────────────

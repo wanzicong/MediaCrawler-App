@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
 from database.db_session import get_mysql_session
+from database.system_models import CrawlerAccount
 from database.models import (
     BilibiliContactInfo,
     BilibiliUpDynamic,
@@ -235,3 +236,93 @@ async def finish_task(task_id: int, body: TaskFinishRequest):
         "total_count": body.total_count,
         "success_count": body.success_count,
     }
+
+
+# ── Pro: 断点续爬 & 多账号 ──────────────────────────────────────
+
+# 内存中的 checkpoint 存储（本地文件为主，远程为辅）
+_checkpoint_store: dict[str, dict] = {}
+
+
+class CheckpointData(BaseModel):
+    task_id: int
+    platform: str
+    crawler_type: str
+    keywords: str = ""
+    current_page: int = 1
+    crawled_note_ids: list[str] = []
+    total_crawled: int = 0
+    last_cursor: Optional[str] = None
+    last_note_time: Optional[int] = None
+    comment_progress: dict[str, int] = {}
+    creator_crawled_count: int = 0
+    status: str = "running"
+    updated_at: float = 0.0
+
+
+@router.get("/tasks/{task_id}/checkpoint")
+async def get_task_checkpoint(task_id: int):
+    """获取任务断点数据"""
+    key = str(task_id)
+    if key in _checkpoint_store:
+        return _checkpoint_store[key]
+    # 也尝试从 CrawlerTask.progress 字段读取
+    task = await ConfigService.get_task(task_id)
+    if task and task.get("progress") and isinstance(task["progress"], dict):
+        cp = task["progress"]
+        if cp.get("status") == "running":
+            _checkpoint_store[key] = cp
+            return cp
+    return {}
+
+
+@router.put("/tasks/{task_id}/checkpoint")
+async def save_task_checkpoint(task_id: int, body: dict):
+    """保存任务断点数据"""
+    _checkpoint_store[str(task_id)] = body
+    # 同时写入 CrawlerTask.progress 字段做持久化
+    await ConfigService.update_task_progress(task_id, body)
+    return {"status": "ok", "task_id": task_id}
+
+
+class AccountRequest(BaseModel):
+    platform: Optional[str] = None
+    status: Optional[str] = "active"
+
+
+@router.get("/accounts")
+async def list_accounts(
+    platform: Optional[str] = None,
+    status: Optional[str] = "active",
+):
+    """获取平台账号列表（多账号管理）"""
+    try:
+        from sqlalchemy import select
+        async with get_mysql_session() as session:
+            stmt = select(CrawlerAccount)
+            if platform:
+                stmt = stmt.where(CrawlerAccount.platform == platform)
+            if status:
+                stmt = stmt.where(CrawlerAccount.status == status)
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+            return {
+                "platform": platform,
+                "accounts": [
+                    {
+                        "id": row.id,
+                        "platform": row.platform,
+                        "username": row.username,
+                        "phone": row.phone or "",
+                        "cookies": row.cookies or {},
+                        "user_agent": row.user_agent or "",
+                        "status": row.status,
+                        "max_daily_requests": row.max_daily_requests,
+                        "daily_request_count": row.daily_request_count,
+                        "total_request_count": row.total_request_count,
+                    }
+                    for row in rows
+                ],
+            }
+    except Exception as e:
+        return {"platform": platform, "accounts": [], "error": str(e)}

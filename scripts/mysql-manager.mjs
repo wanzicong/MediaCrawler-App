@@ -28,7 +28,7 @@ function compose(args) {
 
 function syncEnv() {
   const example = join(ROOT, '.env.example');
-  const apiEnv = join(ROOT, 'MediaCrawler-Api', '.env');
+  const dataApiEnv = join(ROOT, 'Data-API-Service', '.env');
   const rootEnv = join(ROOT, '.env');
 
   if (!existsSync(rootEnv) && existsSync(example)) {
@@ -45,19 +45,19 @@ MYSQL_DB_NAME=media_crawler
 `;
 
   let apiContent = '';
-  if (existsSync(apiEnv)) {
-    apiContent = readFileSync(apiEnv, 'utf8');
+  if (existsSync(dataApiEnv)) {
+    apiContent = readFileSync(dataApiEnv, 'utf8');
     if (!apiContent.includes('MYSQL_DB_HOST')) {
       apiContent = mysqlBlock + '\n' + apiContent;
     }
-  } else if (existsSync(join(ROOT, 'MediaCrawler-Api', '.env.example'))) {
-    apiContent = readFileSync(join(ROOT, 'MediaCrawler-Api', '.env.example'), 'utf8');
+  } else if (existsSync(join(ROOT, 'Data-API-Service', '.env.example'))) {
+    apiContent = readFileSync(join(ROOT, 'Data-API-Service', '.env.example'), 'utf8');
   } else {
     apiContent = mysqlBlock;
   }
 
-  writeFileSync(apiEnv, apiContent, 'utf8');
-  console.log(`已同步 MediaCrawler-Api/.env`);
+  writeFileSync(dataApiEnv, apiContent, 'utf8');
+  console.log(`已同步 Data-API-Service/.env`);
 }
 
 async function waitHealthy(maxSeconds = 120) {

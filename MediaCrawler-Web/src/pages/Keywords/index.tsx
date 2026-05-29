@@ -24,6 +24,7 @@ import {
   PlusOutlined,
   RocketOutlined,
   StarOutlined,
+  TagOutlined,
 } from '@ant-design/icons';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -41,6 +42,8 @@ import {
   batchDeleteKeywords,
   fissionKeywords,
   fetchKeywordStats,
+  runKeyword,
+  batchAutoClassify,
   type Keyword,
   type KeywordGroup,
   type FissionResult,
@@ -81,7 +84,7 @@ export default function KeywordsPage() {
 
   // Fission state
   const [fissionSeed, setFissionSeed] = useState('');
-  const [fissionPlatform, setFissionPlatform] = useState('');
+  const [fissionPlatforms, setFissionPlatforms] = useState<string[]>([]);
   const [fissionDepth, setFissionDepth] = useState(1);
   const [fissionResult, setFissionResult] = useState<FissionResult | null>(null);
   const [fissionLoading, setFissionLoading] = useState(false);
@@ -139,10 +142,10 @@ export default function KeywordsPage() {
 
   // 裂变平台默认同步为第一个启用的平台
   useEffect(() => {
-    if (platforms && platforms.length > 0) {
-      setFissionPlatform((prev) => prev || platforms[0].code);
+    if (platforms && platforms.length > 0 && fissionPlatforms.length === 0) {
+      setFissionPlatforms([platforms[0].code]);
     }
-  }, [platforms]);
+  }, [platforms, fissionPlatforms.length]);
 
   // ── Group Mutations ─────────────────────────────────────────────────
 
@@ -235,6 +238,24 @@ export default function KeywordsPage() {
     },
   });
 
+  const runKwMut = useMutation({
+    mutationFn: (keywordId: number) => runKeyword(keywordId),
+    onSuccess: (res) => {
+      message.success(`爬虫任务已启动，任务ID: ${res.task_id}`);
+      void queryClient.invalidateQueries({ queryKey: ['keywords'] });
+      void queryClient.invalidateQueries({ queryKey: ['keyword-stats'] });
+    },
+  });
+
+  const batchAutoClassifyMut = useMutation({
+    mutationFn: (keywordIds: number[]) => batchAutoClassify(keywordIds),
+    onSuccess: (res) => {
+      message.success(`AI 分类完成，共分类 ${res.classified} 个关键词`);
+      void queryClient.invalidateQueries({ queryKey: ['keywords'] });
+      void queryClient.invalidateQueries({ queryKey: ['keyword-stats'] });
+    },
+  });
+
   // ── Table Columns ──────────────────────────────────────────────────
 
   const columns = useMemo(() => {
@@ -302,9 +323,23 @@ export default function KeywordsPage() {
       {
         title: '操作',
         key: 'action',
-        width: 120,
+        width: 180,
         render: (_: unknown, r: Keyword) => (
           <Space size="small">
+            <Button
+              type="link"
+              size="small"
+              icon={<RocketOutlined />}
+              onClick={() => {
+                modal.confirm({
+                  title: '启动爬虫',
+                  content: `确认对关键词「${r.keyword}」启动爬虫任务？`,
+                  okText: '启动',
+                  cancelText: '取消',
+                  onOk: () => runKwMut.mutate(r.id),
+                });
+              }}
+            />
             <Button
               type="link"
               size="small"
@@ -336,17 +371,17 @@ export default function KeywordsPage() {
       },
     ];
     return cols;
-  }, [groups, form, modal, deleteKwMut, getPlatformName]);
+  }, [groups, form, modal, deleteKwMut, runKwMut, getPlatformName]);
 
   // ── Fission handlers ───────────────────────────────────────────────
 
   const handleFission = async () => {
-    if (!fissionSeed.trim()) return;
+    if (!fissionSeed.trim() || fissionPlatforms.length === 0) return;
     setFissionLoading(true);
     try {
       const result = await fissionKeywords({
         seed_keyword: fissionSeed.trim(),
-        platform: fissionPlatform,
+        platforms: fissionPlatforms,
         depth: fissionDepth,
       });
       setFissionResult(result);
@@ -363,20 +398,34 @@ export default function KeywordsPage() {
     const selected = fissionResult.generated.filter((g) =>
       selectedFissionKeys.includes(g.keyword),
     );
-    try {
-      const res = await batchCreateKeywords({
-        keywords: selected.map((g) => g.keyword),
-        group_id: fissionTargetGroup,
-        platform: fissionPlatform,
-      });
-      message.success(`已添加 ${res.length} 个裂变关键词到词库`);
-      setFissionResult(null);
-      setFissionSeed('');
-      void queryClient.invalidateQueries({ queryKey: ['keywords'] });
-      void queryClient.invalidateQueries({ queryKey: ['keyword-stats'] });
-    } catch {
-      // error handled by interceptor
+    // 按平台分组批量创建
+    const platformGroups: Record<string, string[]> = {};
+    selected.forEach((g) => {
+      const p = g.platform || fissionPlatforms[0] || 'xhs';
+      if (!platformGroups[p]) platformGroups[p] = [];
+      platformGroups[p].push(g.keyword);
+    });
+
+    let totalAdded = 0;
+    for (const [platform, keywords] of Object.entries(platformGroups)) {
+      try {
+        const res = await batchCreateKeywords({
+          keywords,
+          group_id: fissionTargetGroup,
+          platform,
+        });
+        totalAdded += res.length;
+      } catch {
+        // individual platform failure shouldn't block others
+      }
     }
+
+    message.success(`已添加 ${totalAdded} 个裂变关键词到词库`);
+    setFissionResult(null);
+    setFissionSeed('');
+    setFissionPlatforms([]);
+    void queryClient.invalidateQueries({ queryKey: ['keywords'] });
+    void queryClient.invalidateQueries({ queryKey: ['keyword-stats'] });
   };
 
   // ── Group context menu ─────────────────────────────────────────────
@@ -516,6 +565,28 @@ export default function KeywordsPage() {
             >
               批量添加
             </Button>
+            <Button
+              icon={<TagOutlined />}
+              loading={batchAutoClassifyMut.isPending}
+              onClick={() => {
+                const ungroupedIds = (kwData?.items ?? [])
+                  .filter((k) => k.group_id === null)
+                  .map((k) => k.id);
+                if (ungroupedIds.length === 0) {
+                  message.info('没有需要分类的未分组关键词');
+                  return;
+                }
+                modal.confirm({
+                  title: 'AI 自动分类',
+                  content: `将对 ${ungroupedIds.length} 个未分组关键词进行 AI 自动分类，确认继续？`,
+                  okText: '开始分类',
+                  cancelText: '取消',
+                  onOk: () => batchAutoClassifyMut.mutate(ungroupedIds),
+                });
+              }}
+            >
+              AI 分类
+            </Button>
           </div>
         </div>
 
@@ -583,10 +654,26 @@ export default function KeywordsPage() {
           />
           <Space wrap>
             <Select
-              value={fissionPlatform}
-              onChange={setFissionPlatform}
-              style={{ width: 120 }}
-              options={platformOptions}
+              mode="multiple"
+              value={fissionPlatforms}
+              onChange={setFissionPlatforms}
+              style={{ minWidth: 200, maxWidth: 360 }}
+              placeholder="选择目标平台"
+              maxTagCount={3}
+              options={[
+                { value: 'all', label: `全平台 (${platformOptions.length}个)` },
+                ...platformOptions,
+              ]}
+              onSelect={(val) => {
+                if (val === 'all') {
+                  setFissionPlatforms(platformOptions.map((o) => o.value));
+                }
+              }}
+              onDeselect={(val) => {
+                if (val === 'all') {
+                  setFissionPlatforms([]);
+                }
+              }}
             />
             <Select
               value={fissionDepth}
@@ -602,7 +689,7 @@ export default function KeywordsPage() {
               icon={<ExperimentOutlined />}
               loading={fissionLoading}
               onClick={handleFission}
-              disabled={!fissionSeed.trim()}
+              disabled={!fissionSeed.trim() || fissionPlatforms.length === 0}
             >
               开始裂变
             </Button>
@@ -619,6 +706,13 @@ export default function KeywordsPage() {
               <ExperimentOutlined style={{ color: '#6366f1' }} />
               <span>裂变结果：{fissionResult.seed_keyword}</span>
               <Tag color="purple">{fissionResult.generated.length} 个关键词</Tag>
+              <Space size={4}>
+                {fissionResult.platforms.map((p) => (
+                  <Tag key={p} color="blue" style={{ fontSize: 10 }}>
+                    {getPlatformName(p)}
+                  </Tag>
+                ))}
+              </Space>
             </Space>
           }
           extra={
@@ -659,7 +753,7 @@ export default function KeywordsPage() {
               const isSelected = selectedFissionKeys.includes(g.keyword);
               return (
                 <div
-                  key={g.keyword}
+                  key={`${g.platform}-${g.keyword}`}
                   className={`${styles.fissionCard} ${isSelected ? styles.fissionCardSelected : ''}`}
                   onClick={() => {
                     setSelectedFissionKeys((prev) =>
@@ -672,6 +766,13 @@ export default function KeywordsPage() {
                   <div className={styles.fissionCardHeader}>
                     <Checkbox checked={isSelected} style={{ marginRight: 8, flexShrink: 0 }} />
                     <span className={styles.fissionKeyword}>{g.keyword}</span>
+                    <Tag
+                      className={styles.fissionPlatform}
+                      color="blue"
+                      style={{ fontSize: 10, marginRight: 4 }}
+                    >
+                      {getPlatformName(g.platform)}
+                    </Tag>
                     <Tag
                       className={styles.fissionCategory}
                       color={

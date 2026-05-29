@@ -43,6 +43,10 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | \
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen
 
+# 安装 Playwright Chromium 浏览器（需在 uv sync 之后，playwright 包可用时执行）
+# 注意：不加 --with-deps，系统依赖已在上方 apt-get 中安装
+RUN uv run playwright install chromium
+
 # 复制代码
 COPY . .
 
@@ -56,3 +60,4 @@ ENV DISPLAY=:99
 
 # 启动 Xvfb 虚拟显示器，然后启动 uvicorn
 CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 -ac +extension RANDR & uv run uvicorn api.main:app --host 0.0.0.0 --port 8081"]
+

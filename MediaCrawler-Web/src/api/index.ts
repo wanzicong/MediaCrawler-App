@@ -8,4 +8,7 @@ export * from './modules/dataDb';
 export * from './modules/ai';
 export * from './modules/keywords';
 export * from './modules/platforms';
+export * from './modules/pro';
+export * from './modules/comments';
+export * from './modules/pipelines';
 export { default as request } from './request';

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Card, Col, Row, Typography, theme } from 'antd';
 
-import { fetchEnvCheck, fetchHealth, fetchCrawlerTasks } from '@/api';
+import { fetchEnvCheck, fetchHealth, fetchCrawlerTasks, stopCrawler } from '@/api';
 import { fetchDatabaseStatus, initDatabase } from '@/api/modules/system';
 import PageHeader from '@/components/PageHeader';
 import { useCrawlerStatus } from '@/hooks/useCrawlerStatus';
@@ -48,6 +48,14 @@ export default function DashboardPage() {
     },
   });
 
+  const stopMutation = useMutation({
+    mutationFn: stopCrawler,
+    onSuccess: () => {
+      message.success('已发送停止指令');
+      void queryClient.invalidateQueries({ queryKey: ['crawler', 'status'] });
+    },
+  });
+
   return (
     <>
       <PageHeader
@@ -67,6 +75,8 @@ export default function DashboardPage() {
         statusLoading={statusLoading}
         initDbMutation={initDbMutation}
         token={token}
+        onStopCrawler={() => stopMutation.mutate()}
+        stopPending={stopMutation.isPending}
       />
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>

@@ -109,6 +109,10 @@ class CrawlerManager:
                     merged[k] = v
             if "headless" in overrides:
                 merged["cdp_headless"] = overrides["headless"]
+        # Docker 环境强制无头模式（Chrome 在容器中无法启动非无头窗口）
+        if os.getenv("FORCE_CDP_HEADLESS"):
+            merged["cdp_headless"] = True
+            merged["headless"] = True
         merged["save_option"] = "db"
         return merged
 
@@ -148,6 +152,27 @@ class CrawlerManager:
             resp.raise_for_status()
             return resp.json()
 
+    async def _auto_record_keywords(self, config, task_id: int) -> None:
+        """自动记录爬虫任务的关键词到 Data-API-Service 关键词管理模块。静默失败不影响主流程。"""
+        keywords = (config.keywords or "").strip()
+        platform = config.platform.value if hasattr(config.platform, 'value') else str(config.platform)
+
+        if not keywords:
+            return
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(
+                    f"{DATA_API_URL}/api/keywords/auto-record",
+                    json={
+                        "platform": platform,
+                        "keywords": keywords,
+                        "task_id": task_id,
+                    },
+                )
+        except Exception:
+            pass
+
     async def _mark_task_finished_via_api(
         self, task_id: int, success: bool, error_message: str = ""
     ) -> None:
@@ -180,6 +205,8 @@ class CrawlerManager:
                 # Busy: create task via API and queue it
                 task = await self._create_task_via_api(config)
                 self._task_queue.append({"task_id": task["task_id"], "config": config})
+                # 自动记录关键词（异步，不阻塞排队流程）
+                asyncio.create_task(self._auto_record_keywords(config, task["task_id"]))
                 pos = len(self._task_queue)
                 entry = self._create_log_entry(
                     f"Task #{task['task_id']} queued (position {pos}), crawler is busy",
@@ -220,6 +247,9 @@ class CrawlerManager:
 
             task = await self._create_task_via_api(config)
             self.current_task_id = task["task_id"]
+
+            # 自动记录关键词到关键词管理模块（异步，不阻塞爬虫启动）
+            asyncio.create_task(self._auto_record_keywords(config, task["task_id"]))
 
             cmd = self._build_command(self.current_task_id)
 

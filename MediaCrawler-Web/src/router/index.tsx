@@ -10,6 +10,9 @@ const CrawlerPage = lazy(() => import('@/pages/Crawler'));
 const DataPage = lazy(() => import('@/pages/Data'));
 const AiChatPage = lazy(() => import('@/pages/AiChat'));
 const KeywordsPage = lazy(() => import('@/pages/Keywords'));
+const ProPage = lazy(() => import('@/pages/Pro'));
+const CommentsPage = lazy(() => import('@/pages/Comments'));
+const PipelinesPage = lazy(() => import('@/pages/Pipelines'));
 const NotFoundPage = lazy(() => import('@/pages/NotFound'));
 
 function PageLoader() {
@@ -53,6 +56,18 @@ export const router = createBrowserRouter([
       {
         path: 'keywords',
         element: withSuspense(<KeywordsPage />),
+      },
+      {
+        path: 'pro',
+        element: withSuspense(<ProPage />),
+      },
+      {
+        path: 'comments',
+        element: withSuspense(<CommentsPage />),
+      },
+      {
+        path: 'pipelines',
+        element: withSuspense(<PipelinesPage />),
       },
     ],
   },
