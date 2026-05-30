@@ -7,6 +7,8 @@
 # Licensed under NON-COMMERCIAL LEARNING LICENSE 1.1
 #
 
+import os
+
 # 声明：本代码仅供学习和研究目的使用。使用者应遵守以下原则：
 # 1. 不得用于任何商业用途。
 # 2. 使用时应遵守目标平台的使用条款和robots.txt规则。
@@ -56,7 +58,8 @@ ENABLE_CDP_MODE = True
 
 # CDP 调试端口，用于与浏览器通信
 # 如果端口被占用，系统会自动尝试下一个可用端口
-CDP_DEBUG_PORT = 9222
+# 支持通过环境变量 CDP_DEBUG_PORT 注入（多任务并发时每任务分配专属端口）
+CDP_DEBUG_PORT = int(os.getenv("CDP_DEBUG_PORT", "9222"))
 
 # 自定义浏览器路径（可选）
 # 如果为空，系统会自动检测 Chrome/Edge 的安装路径

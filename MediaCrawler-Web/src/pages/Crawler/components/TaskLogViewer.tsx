@@ -111,7 +111,15 @@ export default function TaskLogViewer({ taskId, open, onClose }: Props) {
     setPage(1);
   };
 
-  const formatTime = (recordedAt: string) => dayjs(recordedAt).format('HH:mm:ss');
+  const formatTime = (v: string) => {
+    if (!v) return '--:--:--';
+    // 兼容多种时间格式：ISO 8601、MySQL datetime、纯时间字符串
+    const d = dayjs(v);
+    if (d.isValid()) return d.format('HH:mm:ss');
+    // 尝试提取 HH:MM:SS 部分
+    const m = v.match(/(\d{2}:\d{2}:\d{2})/);
+    return m ? m[1] : v.slice(0, 8);
+  };
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

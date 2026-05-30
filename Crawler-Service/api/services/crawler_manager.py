@@ -234,6 +234,16 @@ class CrawlerManager:
             )
             await self._push_log(entry)
 
+    _CDP_PORT_BASE = 9222
+
+    @staticmethod
+    def _task_cdp_port(task_id: int) -> int:
+        """为每个任务分配专属 CDP 端口，避免多任务并发时共用端口导致浏览器崩溃"""
+        return CrawlerManager._CDP_PORT_BASE + (task_id % 100)
+
+    def _make_subprocess_env(self, task_id: int) -> dict:
+        return {**os.environ, "PYTHONUNBUFFERED": "1", "CDP_DEBUG_PORT": str(self._task_cdp_port(task_id))}
+
     def _build_command(self, task_id: int) -> list:
         import sys as _sys
         return [_sys.executable, "main.py", "--task-id", str(task_id)]
@@ -308,7 +318,7 @@ class CrawlerManager:
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding='utf-8', bufsize=1,
                 cwd=str(self._project_root),
-                env={**os.environ, "PYTHONUNBUFFERED": "1"}
+                env=self._make_subprocess_env(task_id),
             )
 
             read_task = asyncio.create_task(self._read_output(proc, task_id))
@@ -371,7 +381,7 @@ class CrawlerManager:
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding='utf-8', bufsize=1,
                 cwd=str(self._project_root),
-                env={**os.environ, "PYTHONUNBUFFERED": "1"}
+                env=self._make_subprocess_env(task_id),
             )
             read_task = asyncio.create_task(self._read_output(proc, task_id))
 
