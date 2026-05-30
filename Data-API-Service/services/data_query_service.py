@@ -9,21 +9,26 @@ from sqlalchemy import delete, func, select, desc, asc, cast, Integer
 
 from database.db_session import get_mysql_session
 from database.models import (
+    BilibiliUpInfo,
     BilibiliVideo,
     BilibiliVideoComment,
     DouyinAweme,
     DouyinAwemeComment,
+    DyCreator,
     KuaishouVideo,
     KuaishouVideoComment,
+    TiebaCreator,
+    TiebaNote,
+    TiebaComment,
+    WeiboCreator,
     WeiboNote,
     WeiboNoteComment,
     XhsCreator,
     XhsNote,
     XhsNoteComment,
-    TiebaNote,
-    TiebaComment,
     ZhihuContent,
     ZhihuComment,
+    ZhihuCreator,
 )
 
 # ── 平台元数据缓存（应用启动时从 DB 加载，结构同旧 PLATFORM_META） ──
@@ -62,6 +67,16 @@ def list_platforms() -> list[dict]:
 
 
 JS_MAX_SAFE_INTEGER = 9007199254740991
+
+# 创作者各平台的粉丝字段映射（用于默认排序和 _NUMERIC_SORT_FIELDS 中识别）
+_CREATOR_FAN_FIELD: dict[str, str] = {
+    "xhs": "fans",
+    "dy": "fans",
+    "wb": "fans",
+    "tieba": "fans",
+    "bili": "total_fans",
+    "zhihu": "fans",
+}
 
 
 def _row_to_dict(row: Any) -> dict:
@@ -117,11 +132,25 @@ class DataQueryService:
             if order_by in _NUMERIC_SORT_FIELDS:
                 col = cast(col, Integer)
             order_cols.append(desc(col) if order_direction == "desc" else asc(col))
+        # 创作者默认按粉丝数降序排列
+        if kind == "creators" and not order_by:
+            fan_field = _CREATOR_FAN_FIELD.get(platform)
+            if fan_field and hasattr(model, fan_field):
+                col = getattr(model, fan_field)
+                if fan_field in _NUMERIC_SORT_FIELDS:
+                    col = cast(col, Integer)
+                order_cols.append(desc(col))
         order_cols.append(model.id.desc())
 
         async with get_mysql_session() as session:
             count_stmt = select(func.count()).select_from(model)
             list_stmt = select(model).order_by(*order_cols).offset(offset).limit(page_size)
+
+            # 创作者去重：保留每个 user_id 的最新记录（id 最大）
+            if kind == "creators" and hasattr(model, "user_id"):
+                subq = select(func.max(model.id)).group_by(model.user_id)
+                count_stmt = count_stmt.where(model.id.in_(subq))
+                list_stmt = list_stmt.where(model.id.in_(subq))
 
             if content_id and kind == "contents":
                 cid_field = meta["content_id_field"]
@@ -132,7 +161,14 @@ class DataQueryService:
 
             if keyword:
                 pattern = f"%{keyword}%"
-                if hasattr(model, "title"):
+                if kind == "creators":
+                    if hasattr(model, "nickname"):
+                        count_stmt = count_stmt.where(model.nickname.like(pattern))
+                        list_stmt = list_stmt.where(model.nickname.like(pattern))
+                    elif hasattr(model, "user_nickname"):
+                        count_stmt = count_stmt.where(model.user_nickname.like(pattern))
+                        list_stmt = list_stmt.where(model.user_nickname.like(pattern))
+                elif hasattr(model, "title"):
                     count_stmt = count_stmt.where(model.title.like(pattern))
                     list_stmt = list_stmt.where(model.title.like(pattern))
                 elif hasattr(model, "content_text"):

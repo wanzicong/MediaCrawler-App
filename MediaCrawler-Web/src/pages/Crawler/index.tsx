@@ -37,6 +37,7 @@ import CrawlerLaunchForm from './components/CrawlerLaunchForm';
 import CrawlerTaskTable from './components/CrawlerTaskTable';
 import CrawlerTaskDetailModal from './components/CrawlerTaskDetailModal';
 import CrawlerLogViewer from './components/CrawlerLogViewer';
+import TaskLogViewer from './components/TaskLogViewer';
 
 export default function CrawlerPage() {
   const { message, modal } = App.useApp();
@@ -50,6 +51,8 @@ export default function CrawlerPage() {
   const [historyPlatform, setHistoryPlatform] = useState<string | undefined>(undefined);
   const [detailTask, setDetailTask] = useState<CrawlerTask | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [logViewerTaskId, setLogViewerTaskId] = useState<number | null>(null);
+  const [logViewerOpen, setLogViewerOpen] = useState(false);
 
   const { data: platforms } = useQuery({
     queryKey: ['platforms', 'enabled'],
@@ -375,6 +378,10 @@ export default function CrawlerPage() {
             `/data?task_id=${detailTask!.id}&platform=${detailTask!.payload_snapshot.platform}`,
           );
         }}
+        onViewLogs={() => {
+          setLogViewerTaskId(detailTask!.id);
+          setLogViewerOpen(true);
+        }}
         onRerun={() => rerunMutation.mutate(detailTask!.id)}
         onDelete={() => {
           modal.confirm({
@@ -386,6 +393,12 @@ export default function CrawlerPage() {
             onOk: () => deleteMutation.mutate(detailTask!.id),
           });
         }}
+      />
+
+      <TaskLogViewer
+        taskId={logViewerTaskId}
+        open={logViewerOpen}
+        onClose={() => setLogViewerOpen(false)}
       />
     </>
   );

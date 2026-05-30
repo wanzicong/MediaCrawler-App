@@ -58,3 +58,34 @@ export interface CrawlerLogEntry {
 export function fetchCrawlerLogs(limit = 200) {
   return httpGet<{ logs: CrawlerLogEntry[] }>(`/api/crawler/logs?limit=${limit}`);
 }
+
+export interface TaskLogEntry {
+  id: number;
+  task_id: number;
+  level: string;
+  message: string;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface TaskLogsResponse {
+  task_id: number;
+  logs: TaskLogEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+  levels: string[];
+}
+
+export function fetchTaskLogs(taskId: number, params?: {
+  level?: string;
+  page?: number;
+  page_size?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.level) q.set('level', params.level);
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.page_size) q.set('page_size', String(params.page_size));
+  const qs = q.toString();
+  return httpGet<TaskLogsResponse>(`/api/internal/tasks/${taskId}/logs${qs ? `?${qs}` : ''}`);
+}

@@ -178,7 +178,7 @@ async def delete_task(task_id: int):
 
 
 @router.post("/stop")
-async def stop_crawler(task_id: Optional[int] = Body(None)):
+async def stop_crawler(task_id: Optional[int] = Body(None, embed=True)):
     """Stop crawler task(s). task_id=None stops all running tasks."""
     result = await crawler_manager.stop(task_id=task_id)
     if not result.get("stopped"):

@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Card, Space, Tag, Typography, theme } from 'antd';
 import {
   ClearOutlined,
-  WifiOutlined,
+  FullscreenExitOutlined,
+  FullscreenOutlined,
   ReloadOutlined,
+  WifiOutlined,
 } from '@ant-design/icons';
 import type { CrawlerLogEntry } from '@/api/modules/crawler';
 
@@ -26,6 +28,7 @@ export default function CrawlerLogViewer({ logs, connected, onClear, onRefresh }
   const { token } = theme.useToken();
   const containerRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
@@ -34,11 +37,33 @@ export default function CrawlerLogViewer({ logs, connected, onClear, onRefresh }
     }
   }, [logs]);
 
+  // ESC key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
+
   const handleScroll = () => {
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
     autoScrollRef.current = scrollHeight - scrollTop - clientHeight < 40;
   };
+
+  const cardStyle = isFullscreen ? {
+    position: 'fixed' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1050,
+    margin: 0,
+    borderRadius: 0,
+  } : {};
 
   return (
     <Card
@@ -60,6 +85,13 @@ export default function CrawlerLogViewer({ logs, connected, onClear, onRefresh }
           <Button
             type="text"
             size="small"
+            icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            title={isFullscreen ? '退出全屏' : '全屏'}
+          />
+          <Button
+            type="text"
+            size="small"
             icon={<ReloadOutlined />}
             onClick={onRefresh}
           />
@@ -72,12 +104,13 @@ export default function CrawlerLogViewer({ logs, connected, onClear, onRefresh }
         </Space>
       }
       styles={{ body: { padding: 0 } }}
+      style={cardStyle}
     >
       <div
         ref={containerRef}
         onScroll={handleScroll}
         style={{
-          height: 320,
+          height: isFullscreen ? 'calc(100vh - 58px)' : 320,
           overflow: 'auto',
           background: '#0F172A',
           fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace",

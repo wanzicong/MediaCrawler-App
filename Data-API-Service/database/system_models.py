@@ -135,3 +135,16 @@ class Platform(Base):
     sort_order = Column(Integer, default=0, comment="排序权重(越小越靠前)")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CrawlerTaskLog(Base):
+    """爬虫任务运行日志（持久化到 MySQL）"""
+
+    __tablename__ = "crawler_task_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(Integer, nullable=False, index=True, comment="关联任务ID")
+    level = Column(String(16), nullable=False, default="info", comment="日志级别: info/warning/error/success/debug")
+    message = Column(Text, nullable=False, comment="日志内容")
+    recorded_at = Column(String(32), nullable=False, comment="日志时间 HH:MM:SS")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="写入时间")

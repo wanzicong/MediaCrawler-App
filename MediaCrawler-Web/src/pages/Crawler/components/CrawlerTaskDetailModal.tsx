@@ -12,7 +12,7 @@ import {
   Typography,
   theme,
 } from 'antd';
-import { EyeOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
+import { EyeOutlined, FileTextOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
 
@@ -34,6 +34,7 @@ interface Props {
   deletePending: boolean;
   onClose: () => void;
   onViewData: () => void;
+  onViewLogs: () => void;
   onRerun: () => void;
   onDelete: () => void;
 }
@@ -47,6 +48,7 @@ export default function CrawlerTaskDetailModal({
   deletePending,
   onClose,
   onViewData,
+  onViewLogs,
   onRerun,
   onDelete,
 }: Props) {
@@ -69,6 +71,9 @@ export default function CrawlerTaskDetailModal({
       width={720}
       footer={
         <Space>
+          <Button icon={<FileTextOutlined />} onClick={onViewLogs}>
+            查看日志
+          </Button>
           {task?.status === 'completed' && task?.payload_snapshot?.platform && (
             <Button icon={<EyeOutlined />} onClick={onViewData}>
               查看数据

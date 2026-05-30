@@ -15,16 +15,21 @@ from database.models import (
     XhsCreator,
     DouyinAweme,
     DouyinAwemeComment,
+    DyCreator,
     KuaishouVideo,
     KuaishouVideoComment,
     BilibiliVideo,
     BilibiliVideoComment,
+    BilibiliUpInfo,
     WeiboNote,
     WeiboNoteComment,
+    WeiboCreator,
     TiebaNote,
     TiebaComment,
+    TiebaCreator,
     ZhihuContent,
     ZhihuComment,
+    ZhihuCreator,
 )
 
 # ── 平台代码 → 数据模型/字段映射（代码层面，不可入库） ──────────────────
@@ -42,6 +47,7 @@ _PLATFORM_MODEL_CONFIG: dict[str, dict[str, Any]] = {
         "kinds": {
             "contents": {"model": DouyinAweme, "label": "视频"},
             "comments": {"model": DouyinAwemeComment, "label": "评论"},
+            "creators": {"model": DyCreator, "label": "创作者"},
         },
     },
     "ks": {
@@ -56,6 +62,7 @@ _PLATFORM_MODEL_CONFIG: dict[str, dict[str, Any]] = {
         "kinds": {
             "contents": {"model": BilibiliVideo, "label": "视频"},
             "comments": {"model": BilibiliVideoComment, "label": "评论"},
+            "creators": {"model": BilibiliUpInfo, "label": "创作者"},
         },
     },
     "wb": {
@@ -63,6 +70,7 @@ _PLATFORM_MODEL_CONFIG: dict[str, dict[str, Any]] = {
         "kinds": {
             "contents": {"model": WeiboNote, "label": "微博"},
             "comments": {"model": WeiboNoteComment, "label": "评论"},
+            "creators": {"model": WeiboCreator, "label": "创作者"},
         },
     },
     "tieba": {
@@ -70,6 +78,7 @@ _PLATFORM_MODEL_CONFIG: dict[str, dict[str, Any]] = {
         "kinds": {
             "contents": {"model": TiebaNote, "label": "帖子"},
             "comments": {"model": TiebaComment, "label": "评论"},
+            "creators": {"model": TiebaCreator, "label": "创作者"},
         },
     },
     "zhihu": {
@@ -77,6 +86,7 @@ _PLATFORM_MODEL_CONFIG: dict[str, dict[str, Any]] = {
         "kinds": {
             "contents": {"model": ZhihuContent, "label": "内容"},
             "comments": {"model": ZhihuComment, "label": "评论"},
+            "creators": {"model": ZhihuCreator, "label": "创作者"},
         },
     },
 }

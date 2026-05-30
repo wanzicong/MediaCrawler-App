@@ -96,6 +96,15 @@ export default function DataPage() {
     return fields[platform] ?? [];
   }, [platform]);
 
+  // 创作者类型支持的排序字段（按粉丝数/关注数）
+  const creatorSortOptions = useMemo(() => {
+    if (kind !== 'creators') return [];
+    return [
+      { value: 'fans', label: '粉丝数' },
+      { value: 'follows', label: '关注数' },
+    ];
+  }, [kind]);
+
   // 切换平台/类型时重置排序
   const handlePlatformChange = useCallback((v: string) => {
     setPlatform(v);
@@ -106,8 +115,13 @@ export default function DataPage() {
 
   const handleKindChange = useCallback((v: string) => {
     setKind(v);
-    setOrderBy('');
-    setOrderDirection('desc');
+    if (v === 'creators') {
+      setOrderBy('fans');
+      setOrderDirection('desc');
+    } else {
+      setOrderBy('');
+      setOrderDirection('desc');
+    }
     setPage(1);
   }, []);
 
@@ -482,7 +496,7 @@ export default function DataPage() {
           keyword={keyword}
           dataTotal={data?.total}
           hasFilters={!!(filterTaskId || filterContentId || searchKeyword)}
-          sortOptions={videoSortOptions}
+          sortOptions={[...videoSortOptions, ...creatorSortOptions]}
           orderBy={orderBy}
           orderDirection={orderDirection}
           filterTaskId={filterTaskId}

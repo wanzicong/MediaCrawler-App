@@ -20,8 +20,13 @@ export const IMPORTANT_FIELDS: Record<string, string[]> = {
   'tieba.comments': ['user_avatar', 'user_nickname', 'content', 'publish_time'],
   'zhihu.comments': ['user_avatar', 'user_nickname', 'content', 'publish_time'],
 
-  // 创作者（保持不变）
+  // 创作者
   'xhs.creators': ['user_id', 'nickname', 'avatar', 'desc', 'gender', 'follows', 'fans', 'interaction', 'ip_location'],
+  'dy.creators': ['avatar', 'nickname', 'fans', 'follows', 'interaction', 'videos_count', 'ip_location'],
+  'bili.creators': ['avatar', 'nickname', 'total_fans', 'total_liked', 'user_rank', 'is_official', 'sign'],
+  'wb.creators': ['avatar', 'nickname', 'fans', 'follows', 'desc', 'gender'],
+  'tieba.creators': ['avatar', 'nickname', 'fans', 'follows', 'registration_duration'],
+  'zhihu.creators': ['user_avatar', 'user_nickname', 'fans', 'follows', 'anwser_count', 'article_count', 'get_voteup_count'],
 };
 
 /** 字段名 → 中文标签 */

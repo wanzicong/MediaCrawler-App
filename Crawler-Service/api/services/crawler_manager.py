@@ -43,6 +43,9 @@ class CrawlerManager:
         self._task_queue: List[dict] = []
         self._starting = False
         self._project_root = Path(__file__).parent.parent.parent
+        # 数据库日志批量写入缓冲区
+        self._db_log_buffer: List[dict] = []
+        self._db_log_flush_task: Optional[asyncio.Task] = None
 
     @property
     def logs(self) -> List[LogEntry]:
@@ -64,6 +67,7 @@ class CrawlerManager:
             timestamp=datetime.now().strftime("%H:%M:%S"),
             level=level,
             message=f"[Task #{task_id}] {message}" if task_id else message,
+            task_id=task_id,
         )
         self._logs.append(entry)
         if len(self._logs) > 500:
@@ -76,6 +80,36 @@ class CrawlerManager:
                 self._log_queue.put_nowait(entry)
             except asyncio.QueueFull:
                 pass
+        # 同时缓冲日志用于数据库批量写入
+        if entry.task_id is not None:
+            self._db_log_buffer.append({
+                "task_id": entry.task_id,
+                "level": entry.level,
+                "message": entry.message,
+                "recorded_at": entry.timestamp,
+            })
+            await self._ensure_flush_task()
+
+    async def _ensure_flush_task(self):
+        """确保数据库日志批量写入任务在运行"""
+        if self._db_log_flush_task is None or self._db_log_flush_task.done():
+            self._db_log_flush_task = asyncio.create_task(self._flush_db_logs())
+
+    async def _flush_db_logs(self):
+        """每5秒批量将缓冲日志写入 Data-API 数据库"""
+        while True:
+            await asyncio.sleep(5)
+            if self._db_log_buffer:
+                batch = self._db_log_buffer[:]
+                self._db_log_buffer.clear()
+                try:
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        await client.post(
+                            f"{DATA_API_URL}/api/internal/logs/batch",
+                            json={"logs": batch},
+                        )
+                except Exception:
+                    pass  # 日志写入失败不影响主流程
 
     def _parse_log_level(self, line: str) -> str:
         line_upper = line.upper()
@@ -159,23 +193,23 @@ class CrawlerManager:
             pass
 
     async def _mark_task_finished_via_api(
-        self, task_id: int, success: bool, error_message: str = ""
+        self, task_id: int, success: bool, error_message: str = "", status: str = ""
     ) -> None:
-        status = "completed" if success else "failed"
+        final_status = status or ("completed" if success else "failed")
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.put(
                     f"{DATA_API_URL}/api/internal/tasks/{task_id}/finish",
-                    json={"status": status, "error": error_message},
+                    json={"status": final_status, "error": error_message},
                 )
                 resp.raise_for_status()
                 entry = self._create_log_entry(
-                    f"Task #{task_id} marked as {status} in DB", "info"
+                    f"Task #{task_id} marked as {final_status} in DB", "info", task_id
                 )
                 await self._push_log(entry)
         except Exception as e:
             entry = self._create_log_entry(
-                f"Failed to mark task #{task_id} as {status}: {e}", "error"
+                f"Failed to mark task #{task_id} as {status}: {e}", "error", task_id
             )
             await self._push_log(entry)
 
@@ -362,6 +396,9 @@ class CrawlerManager:
 
             async with self._lock:
                 self._cleanup_task(tid)
+
+            # 更新数据库任务状态为 cancelled
+            await self._mark_task_finished_via_api(tid, False, "用户手动停止", status="cancelled")
 
         return {"stopped": True, "task_ids": [t[0] for t in to_kill]}
 

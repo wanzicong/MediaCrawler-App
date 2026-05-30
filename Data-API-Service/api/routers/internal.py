@@ -6,12 +6,12 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
 from database.db_session import get_mysql_session
-from database.system_models import CrawlerAccount
+from database.system_models import CrawlerAccount, CrawlerTaskLog
 from database.models import (
     BilibiliContactInfo,
     BilibiliUpDynamic,
@@ -327,3 +327,123 @@ async def list_accounts(
             }
     except Exception as e:
         return {"platform": platform, "accounts": [], "error": str(e)}
+
+
+# ── 爬虫任务日志查询 ──────────────────────────────────────────
+
+
+@router.get("/tasks/{task_id}/logs")
+async def get_task_logs(
+    task_id: int,
+    level: Optional[str] = Query(None, description="按日志级别过滤: info/warning/error/success/debug"),
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(50, ge=10, le=500, description="每页条数 (10-500)"),
+):
+    """查询爬虫任务的持久化运行日志，支持按级别过滤和分页"""
+    from sqlalchemy import select, func
+
+    # 验证任务存在，同时获取任务摘要信息
+    task = await ConfigService.get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    payload = task.get("payload_snapshot") or {}
+    platform = payload.get("platform", "unknown")
+    task_summary = {
+        "task_id": task_id,
+        "status": task.get("status"),
+        "platform": platform,
+        "created_at": task.get("created_at"),
+        "started_at": task.get("started_at"),
+        "finished_at": task.get("finished_at"),
+    }
+
+    async with get_mysql_session() as session:
+        # 统计总数
+        count_stmt = (
+            select(func.count())
+            .select_from(CrawlerTaskLog)
+            .where(CrawlerTaskLog.task_id == task_id)
+        )
+        if level:
+            count_stmt = count_stmt.where(CrawlerTaskLog.level == level)
+        total = (await session.execute(count_stmt)).scalar() or 0
+
+        # 获取该任务的所有去重日志级别（用于前端构建过滤 UI）
+        levels_stmt = (
+            select(CrawlerTaskLog.level)
+            .where(CrawlerTaskLog.task_id == task_id)
+            .distinct()
+        )
+        levels_result = await session.execute(levels_stmt)
+        levels = sorted([row[0] for row in levels_result.all()])
+
+        # 分页查询日志（按 id 升序，即写入先后顺序）
+        offset = (page - 1) * page_size
+        logs_stmt = (
+            select(CrawlerTaskLog)
+            .where(CrawlerTaskLog.task_id == task_id)
+        )
+        if level:
+            logs_stmt = logs_stmt.where(CrawlerTaskLog.level == level)
+        logs_stmt = logs_stmt.order_by(CrawlerTaskLog.id.asc()).offset(offset).limit(page_size)
+
+        logs_result = await session.execute(logs_stmt)
+        logs = [
+            {
+                "id": row.id,
+                "level": row.level,
+                "message": row.message,
+                "recorded_at": row.recorded_at,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in logs_result.scalars().all()
+        ]
+
+    return {
+        "task_id": task_id,
+        "logs": logs,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "levels": levels,
+        "task_summary": task_summary,
+    }
+
+
+# ── 爬虫任务日志批量写入 ──────────────────────────────────────
+
+
+class LogBatchItem(BaseModel):
+    task_id: int
+    level: str = "info"
+    message: str
+    recorded_at: str
+
+
+class LogBatchRequest(BaseModel):
+    logs: list[LogBatchItem]
+
+
+@router.post("/logs/batch")
+async def batch_write_logs(body: LogBatchRequest):
+    """批量写入爬虫任务运行日志到 MySQL"""
+    if not body.logs:
+        return {"ok": True, "count": 0}
+
+    try:
+        from sqlalchemy import insert
+        async with get_mysql_session() as session:
+            stmt = insert(CrawlerTaskLog).values([
+                {
+                    "task_id": log.task_id,
+                    "level": log.level,
+                    "message": log.message,
+                    "recorded_at": log.recorded_at,
+                }
+                for log in body.logs
+            ])
+            await session.execute(stmt)
+        return {"ok": True, "count": len(body.logs)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Batch log write failed: {str(e)}")

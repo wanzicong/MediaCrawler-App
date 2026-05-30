@@ -121,7 +121,7 @@ export default function DataFilterBar({
         onChange={(e) => onKeywordChange(e.target.value)}
         onSearch={onSearch}
       />
-      {sortOptions.length > 0 && kind === 'contents' && (
+      {sortOptions.length > 0 && (kind === 'contents' || kind === 'creators') && (
         <>
           <Select
             style={{ width: 120 }}
