@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Card, Tabs, Table, Tag, Button, Space, InputNumber, Form,
   Select, Input, message, Descriptions, Popconfirm, Badge, Statistic,
@@ -11,6 +11,8 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PageHeader from '@/components/PageHeader';
+import { PLATFORM_LABELS } from '@/constants';
+import { fetchEnabledPlatforms } from '@/api/modules/platforms';
 import {
   fetchProStatus, fetchProConfig, startProCrawler, stopProCrawler,
   setMaxConcurrent, fetchCheckpoint, deleteCheckpoint,
@@ -32,6 +34,16 @@ function SchedulerPanel() {
     queryKey: ['pro-config'],
     queryFn: fetchProConfig,
   });
+
+  const { data: platforms } = useQuery({
+    queryKey: ['platforms', 'enabled'],
+    queryFn: fetchEnabledPlatforms,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const platformOptions = (platforms ?? []).length > 0
+    ? platforms!.map((p) => ({ label: p.name, value: p.code }))
+    : Object.entries(PLATFORM_LABELS).map(([k, v]) => ({ label: v, value: k }));
 
   const [form] = Form.useForm();
 
@@ -90,8 +102,7 @@ function SchedulerPanel() {
       <Card title="提交新任务" size="small" style={{ marginBottom: 16 }}>
         <Form form={form} layout="inline" onFinish={(v) => startMut.mutate(v)}>
           <Form.Item name="platform" rules={[{ required: true }]}>
-            <Select style={{ width: 100 }} placeholder="平台"
-              options={['xhs','dy','ks','bili','wb','tieba','zhihu'].map(p => ({ label: p, value: p }))} />
+            <Select style={{ width: 100 }} placeholder="平台" options={platformOptions} />
           </Form.Item>
           <Form.Item name="crawler_type" rules={[{ required: true }]}>
             <Select style={{ width: 100 }} placeholder="类型"
@@ -205,8 +216,28 @@ function CheckpointPanel() {
 
 // ==================== 多账号面板 ====================
 function AccountPanel() {
-  const [platform, setPlatform] = useState('xhs');
   const qc = useQueryClient();
+
+  const { data: platforms } = useQuery({
+    queryKey: ['platforms', 'enabled'],
+    queryFn: fetchEnabledPlatforms,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const platformOptions = (platforms ?? []).length > 0
+    ? platforms!.map((p) => ({ label: p.name, value: p.code }))
+    : Object.entries(PLATFORM_LABELS).map(([k, v]) => ({ label: v, value: k }));
+
+  const [platform, setPlatform] = useState(platformOptions[0]?.value ?? 'xhs');
+
+  useEffect(() => {
+    if (platforms && platforms.length > 0) {
+      const codes = platforms.map((p) => p.code);
+      if (!codes.includes(platform)) {
+        setPlatform(platforms[0].code);
+      }
+    }
+  }, [platforms]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data, isLoading } = useQuery({
     queryKey: ['pro-accounts', platform],
@@ -241,7 +272,7 @@ function AccountPanel() {
         <Space>
           <Text>平台:</Text>
           <Select value={platform} onChange={setPlatform} style={{ width: 100 }}
-            options={['xhs','dy','ks','bili','wb','tieba','zhihu'].map(p => ({ label: p, value: p }))} />
+            options={platformOptions} />
           <Button icon={<ReloadOutlined />} onClick={() => refreshMut.mutate()} loading={refreshMut.isPending}>
             刷新账号
           </Button>

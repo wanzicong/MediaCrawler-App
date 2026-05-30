@@ -165,9 +165,14 @@ export default function CrawlerPage() {
     const def = profiles.find((p) => p.is_default) ?? profiles[0];
     if (def && profileId == null) {
       const p = def.payload;
+      // 确保方案的平台在已启用列表中，否则回退到第一个已启用平台
+      const enabledPlatformCodes = platforms?.map((pl) => pl.code) ?? [];
+      const validPlatform = enabledPlatformCodes.includes(p.platform)
+        ? p.platform
+        : (enabledPlatformCodes[0] || p.platform);
       form.setFieldsValue({
         profile_id: def.id,
-        platform: p.platform as PlatformCode,
+        platform: validPlatform as PlatformCode,
         login_type: p.login_type as LoginType,
         crawler_type: p.crawler_type as CrawlerStartPayload['crawler_type'],
         keywords: p.keywords,
@@ -180,15 +185,19 @@ export default function CrawlerPage() {
         cookies: p.cookies,
       });
     }
-  }, [profiles, form, profileId]);
+  }, [profiles, platforms, form, profileId]);
 
   const applyProfile = (id: number) => {
     const pf = profiles?.find((x) => x.id === id);
     if (!pf) return;
     const p = pf.payload;
+    const enabledPlatformCodes = platforms?.map((pl) => pl.code) ?? [];
+    const validPlatform = enabledPlatformCodes.includes(p.platform)
+      ? p.platform
+      : (enabledPlatformCodes[0] || p.platform);
     form.setFieldsValue({
       profile_id: id,
-      platform: p.platform as PlatformCode,
+      platform: validPlatform as PlatformCode,
       login_type: p.login_type as LoginType,
       crawler_type: p.crawler_type as CrawlerStartPayload['crawler_type'],
       keywords: p.keywords,
