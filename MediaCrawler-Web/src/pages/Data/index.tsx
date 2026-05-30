@@ -93,6 +93,22 @@ export default function DataPage() {
         { value: 'video_comment', label: '评论数' },
         { value: 'liked_count', label: '点赞数' },
       ],
+      zhihu: [
+        { value: 'comment_count', label: '评论数' },
+        { value: 'voteup_count', label: '赞同数' },
+      ],
+      xhs: [
+        { value: 'comment_count', label: '评论数' },
+        { value: 'liked_count', label: '点赞数' },
+        { value: 'collected_count', label: '收藏数' },
+      ],
+      wb: [
+        { value: 'comment_count', label: '评论数' },
+        { value: 'liked_count', label: '点赞数' },
+      ],
+      tieba: [
+        { value: 'comment_count', label: '评论数' },
+      ],
     };
     return fields[platform] ?? [];
   }, [platform]);
