@@ -79,6 +79,7 @@ export default function KeywordsPage() {
   const [expandedParents, setExpandedParents] = useState<Set<number>>(new Set());
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
+  const [platformFilter, setPlatformFilter] = useState<string | undefined>();
   const [keywordSearch, setKeywordSearch] = useState('');
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
@@ -108,13 +109,14 @@ export default function KeywordsPage() {
   });
 
   const { data: kwData, isLoading: kwLoading } = useQuery({
-    queryKey: ['keywords', selectedGroup, page, statusFilter, keywordSearch],
+    queryKey: ['keywords', selectedGroup, page, statusFilter, platformFilter, keywordSearch],
     queryFn: () =>
       fetchKeywords({
         group_id: selectedGroup ?? undefined,
         page,
         page_size: 50,
         status: statusFilter || undefined,
+        platform: platformFilter || undefined,
         keyword: keywordSearch || undefined,
       }),
     placeholderData: (prev) => prev,
@@ -636,6 +638,17 @@ export default function KeywordsPage() {
               }}
             />
             <Select
+              placeholder="平台筛选"
+              allowClear
+              style={{ width: 120 }}
+              value={platformFilter}
+              onChange={(v) => {
+                setPlatformFilter(v);
+                setPage(1);
+              }}
+              options={platformOptions}
+            />
+            <Select
               placeholder="状态筛选"
               allowClear
               style={{ width: 110 }}
@@ -1042,7 +1055,8 @@ export default function KeywordsPage() {
           </Button>
         }
       />
-      <Card style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <Card style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}
+        styles={{ body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '0 0 16px 0' } }}>
         <Tabs
           defaultActiveKey="library"
           items={[

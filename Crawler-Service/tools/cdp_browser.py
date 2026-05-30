@@ -271,6 +271,7 @@ class CDPBrowserManager:
         # Set user data directory (if save login state is enabled)
         user_data_dir = None
         if config.SAVE_LOGIN_STATE:
+            # 同平台共享 user_data_dir，实现一次登录所有任务复用
             user_data_dir = os.path.join(
                 os.getcwd(),
                 "browser_data",

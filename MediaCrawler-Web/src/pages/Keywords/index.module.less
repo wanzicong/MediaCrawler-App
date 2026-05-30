@@ -2,6 +2,32 @@
   height: calc(100vh - 180px);
   display: flex;
   flex-direction: column;
+
+  // 确保 Tabs 内容区域能正确传递高度约束
+  :global(.ant-tabs) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  :global(.ant-tabs-content-holder) {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  :global(.ant-tabs-content) {
+    height: 100%;
+  }
+
+  :global(.ant-tabs-tabpane) {
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 // ── Tab 1: 关键词库 ────────────────────────────────────────────────
@@ -25,6 +51,7 @@
   background: #fafafa;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .groupSidebarHeader {
@@ -142,16 +169,7 @@
 
 .tableWrapper {
   flex: 1;
-  overflow: auto;
-
-  &::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: #d9d9d9;
-    border-radius: 3px;
-  }
+  overflow: hidden;
 
   :global(.ant-table-wrapper) {
     height: 100%;

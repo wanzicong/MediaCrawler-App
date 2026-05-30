@@ -91,6 +91,27 @@ services:
     networks:
       - mediacrawler-net
 
+  browser-service:
+    build:
+      context: ./Browser-Service
+      dockerfile: Dockerfile
+    container_name: mediacrawler-browser
+    restart: unless-stopped
+    ports:
+      - "9500:9500"
+      - "9222-9229:9222-9229"
+    environment:
+      BROWSER_POOL_MAX_SIZE: ${BROWSER_POOL_MAX_SIZE:-3}
+      BROWSER_HEADLESS: "true"
+      TZ: Asia/Shanghai
+      PYTHONUNBUFFERED: 1
+    # Chrome 需要较大的共享内存
+    shm_size: '2gb'
+    volumes:
+      - browser_data:/app/browser_data
+    networks:
+      - mediacrawler-net
+
   crawler:
     build: ./Crawler-Service
     container_name: mediacrawler-crawler
@@ -101,6 +122,7 @@ services:
       # 服务间通信
       DATA_API_URL: http://data-api:8080
       SIGNER_SERVICE_URL: http://signer:8082
+      BROWSER_SERVICE_URL: http://browser-service:9500
       # Redis 缓存（默认关闭，需要时设置 CACHE_TYPE_REDIS_ENABLED=1）
       REDIS_DB_HOST: redis
       REDIS_DB_PORT: 6379
@@ -163,3 +185,4 @@ volumes:
   mediacrawler_mysql_data:
   mediacrawler_redis_data:
   mediacrawler_browser_data:
+  browser_data:

@@ -235,14 +235,20 @@ class CrawlerManager:
             await self._push_log(entry)
 
     _CDP_PORT_BASE = 9222
+    # 平台 → CDP 端口映射（同平台任务共享浏览器，复用登录态）
+    _PLATFORM_CDP_PORTS = {
+        "xhs": 9222, "dy": 9223, "ks": 9224, "bili": 9225,
+        "wb": 9226, "tieba": 9227, "zhihu": 9228,
+    }
 
     @staticmethod
-    def _task_cdp_port(task_id: int) -> int:
-        """为每个任务分配专属 CDP 端口，避免多任务并发时共用端口导致浏览器崩溃"""
-        return CrawlerManager._CDP_PORT_BASE + (task_id % 100)
+    def _platform_cdp_port(platform: str) -> int:
+        """按平台分配 CDP 端口，同平台任务共享浏览器以复用登录态"""
+        return CrawlerManager._PLATFORM_CDP_PORTS.get(platform, CrawlerManager._CDP_PORT_BASE)
 
-    def _make_subprocess_env(self, task_id: int) -> dict:
-        return {**os.environ, "PYTHONUNBUFFERED": "1", "CDP_DEBUG_PORT": str(self._task_cdp_port(task_id))}
+    def _make_subprocess_env(self, task_id: int, platform: str = "") -> dict:
+        port = self._platform_cdp_port(platform) if platform else self._CDP_PORT_BASE + (task_id % 100)
+        return {**os.environ, "PYTHONUNBUFFERED": "1", "CDP_DEBUG_PORT": str(port)}
 
     def _build_command(self, task_id: int) -> list:
         import sys as _sys
@@ -318,7 +324,7 @@ class CrawlerManager:
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding='utf-8', bufsize=1,
                 cwd=str(self._project_root),
-                env=self._make_subprocess_env(task_id),
+                env=self._make_subprocess_env(task_id, platform),
             )
 
             read_task = asyncio.create_task(self._read_output(proc, task_id))
@@ -381,7 +387,7 @@ class CrawlerManager:
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding='utf-8', bufsize=1,
                 cwd=str(self._project_root),
-                env=self._make_subprocess_env(task_id),
+                env=self._make_subprocess_env(task_id, platform),
             )
             read_task = asyncio.create_task(self._read_output(proc, task_id))
 
@@ -595,13 +601,13 @@ class CrawlerManager:
                     pass  # pipe 已关闭，正常情况
 
             exit_code = proc.returncode or -1
-            success = exit_code == 0
-            if success:
+            # 子进程已在 main.py finally 块中自行上报状态，此处不再覆盖
+            # 避免 completed → failed 的竞态条件
+            if exit_code == 0:
                 entry = self._create_log_entry("Crawler completed successfully", "success", task_id)
             else:
-                entry = self._create_log_entry(f"Crawler exited with code: {exit_code}", "warning", task_id)
+                entry = self._create_log_entry(f"Crawler exited with code: {exit_code} (status handled by subprocess)", "warning", task_id)
             await self._push_log(entry)
-            await self._mark_task_finished_via_api(task_id, success, "" if success else f"exit code {exit_code}")
 
         except asyncio.CancelledError:
             if monitor_task and not monitor_task.done():
