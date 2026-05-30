@@ -144,6 +144,7 @@ export default function DataPage() {
   // 切换平台/类型时重置排序
   const handlePlatformChange = useCallback((v: string) => {
     setPlatform(v);
+    setKind('contents');
     setOrderBy('');
     setOrderDirection('desc');
     setPage(1);

@@ -86,7 +86,6 @@ export default function DataFilterBar({
         options={platforms.map((p) => ({ value: p.value, label: p.label }))}
         onChange={(v) => {
           onPlatformChange(v);
-          onKindChange('contents');
         }}
       />
       <Select

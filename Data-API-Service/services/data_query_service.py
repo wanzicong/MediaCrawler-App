@@ -212,12 +212,13 @@ class DataQueryService:
         page_size = min(max(1, page_size), 200)
         offset = (page - 1) * page_size
 
-        # 排序字段（与通用 query 方法一致的 CAST 逻辑）
+        # 排序字段（与通用 query 方法保持完全一致）
         _NUMERIC_SORT_FIELDS = {
             "video_play_count", "video_comment", "video_danmaku", "video_favorite_count",
             "video_share_count", "video_coin_count", "viewd_count", "comment_count",
             "share_count", "collected_count", "liked_count", "disliked_count",
-            "like_count", "sub_comment_count",
+            "like_count", "sub_comment_count", "total_fans", "total_liked",
+            "fans", "follows", "interaction",
         }
         order_cols = []
         if order_by and hasattr(model, order_by):

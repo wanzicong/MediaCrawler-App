@@ -28,7 +28,7 @@ import {
   TagOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -81,6 +81,7 @@ export default function KeywordsPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [platformFilter, setPlatformFilter] = useState<string | undefined>();
   const [keywordSearch, setKeywordSearch] = useState('');
+  const keywordTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<KeywordGroup | null>(null);
@@ -627,12 +628,17 @@ export default function KeywordsPage() {
               placeholder="搜索关键词…"
               allowClear
               style={{ width: 200 }}
-              value={keywordSearch}
+              defaultValue={keywordSearch}
               onChange={(e) => {
-                setKeywordSearch(e.target.value);
+                const v = e.target.value;
                 setPage(1);
+                if (keywordTimerRef.current) clearTimeout(keywordTimerRef.current);
+                keywordTimerRef.current = setTimeout(() => {
+                  setKeywordSearch(v);
+                }, 300);
               }}
               onSearch={(v) => {
+                if (keywordTimerRef.current) clearTimeout(keywordTimerRef.current);
                 setKeywordSearch(v);
                 setPage(1);
               }}

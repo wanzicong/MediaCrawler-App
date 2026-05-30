@@ -116,8 +116,8 @@ async def create_task(body: CreateTaskRequest):
 
 @router.get("/tasks")
 async def list_tasks(
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(20, ge=1, le=100, description="每页条数 (1-100)"),
     status: Optional[str] = None,
     platform: Optional[str] = None,
 ):
