@@ -107,11 +107,18 @@ export default function CrawlerPage() {
     },
   });
 
+  const [stoppingTaskId, setStoppingTaskId] = useState<number | null>(null);
+
   const stopMutation = useMutation({
     mutationFn: (taskId?: number) => stopCrawler(taskId),
     onSuccess: () => {
       message.success('已发送停止指令');
+      setStoppingTaskId(null);
       void queryClient.invalidateQueries({ queryKey: ['crawler', 'status'] });
+      void queryClient.invalidateQueries({ queryKey: ['crawler-tasks'] });
+    },
+    onError: () => {
+      setStoppingTaskId(null);
     },
   });
 
@@ -346,8 +353,12 @@ export default function CrawlerPage() {
                 onDelete={handleDelete}
                 onExecute={handleExecute}
                 onRefresh={handleRefresh}
-                onStop={(taskId) => stopMutation.mutate(taskId)}
+                onStop={(taskId) => {
+                  setStoppingTaskId(taskId);
+                  stopMutation.mutate(taskId);
+                }}
                 stopPending={stopMutation.isPending}
+                stoppingTaskId={stoppingTaskId}
               />
             ),
           },

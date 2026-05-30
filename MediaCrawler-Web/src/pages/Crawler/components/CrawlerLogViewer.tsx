@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Card, Space, Tag, Typography, theme } from 'antd';
 import {
   ClearOutlined,
+  ColumnHeightOutlined,
   FullscreenExitOutlined,
   FullscreenOutlined,
   ReloadOutlined,
@@ -24,11 +25,19 @@ const LEVEL_CONFIG: Record<string, { color: string; label: string }> = {
   debug: { color: 'processing', label: 'DEBUG' },
 };
 
+const MIN_LOG_HEIGHT = 180;
+const MAX_LOG_HEIGHT = typeof window !== 'undefined' ? window.innerHeight - 120 : 800;
+const DEFAULT_LOG_HEIGHT = 320;
+
 export default function CrawlerLogViewer({ logs, connected, onClear, onRefresh }: Props) {
   const { token } = theme.useToken();
   const containerRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [logHeight, setLogHeight] = useState(DEFAULT_LOG_HEIGHT);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartY = useRef(0);
+  const resizeStartH = useRef(DEFAULT_LOG_HEIGHT);
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
@@ -48,6 +57,30 @@ export default function CrawlerLogViewer({ logs, connected, onClear, onRefresh }
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
+  // 拖拽调整日志窗口高度
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartY.current = e.clientY;
+    resizeStartH.current = logHeight;
+  }, [logHeight]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = resizeStartY.current - e.clientY;
+      const newHeight = Math.min(MAX_LOG_HEIGHT, Math.max(MIN_LOG_HEIGHT, resizeStartH.current + delta));
+      setLogHeight(newHeight);
+    };
+    const handleMouseUp = () => setIsResizing(false);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
   const handleScroll = () => {
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
@@ -64,6 +97,8 @@ export default function CrawlerLogViewer({ logs, connected, onClear, onRefresh }
     margin: 0,
     borderRadius: 0,
   } : {};
+
+  const logPanelHeight = isFullscreen ? 'calc(100vh - 58px)' : logHeight;
 
   return (
     <Card
@@ -82,12 +117,21 @@ export default function CrawlerLogViewer({ logs, connected, onClear, onRefresh }
       }
       extra={
         <Space size={4}>
+          {!isFullscreen && (
+            <Button
+              type="text"
+              size="small"
+              icon={<ColumnHeightOutlined />}
+              onClick={() => setLogHeight(logHeight < 500 ? 600 : DEFAULT_LOG_HEIGHT)}
+              title="切换日志窗口高度"
+            />
+          )}
           <Button
             type="text"
             size="small"
             icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
             onClick={() => setIsFullscreen(!isFullscreen)}
-            title={isFullscreen ? '退出全屏' : '全屏'}
+            title={isFullscreen ? '退出全屏 (Esc)' : '全屏'}
           />
           <Button
             type="text"
@@ -106,11 +150,26 @@ export default function CrawlerLogViewer({ logs, connected, onClear, onRefresh }
       styles={{ body: { padding: 0 } }}
       style={cardStyle}
     >
+      {/* 拖拽手柄（非全屏时显示） */}
+      {!isFullscreen && (
+        <div
+          onMouseDown={handleResizeStart}
+          style={{
+            height: 6,
+            cursor: 'ns-resize',
+            background: isResizing ? token.colorPrimary : '#1E293B',
+            borderTop: '1px solid #334155',
+            transition: isResizing ? 'none' : 'background 0.15s',
+            userSelect: 'none',
+          }}
+          title="拖拽调整日志窗口高度"
+        />
+      )}
       <div
         ref={containerRef}
         onScroll={handleScroll}
         style={{
-          height: isFullscreen ? 'calc(100vh - 58px)' : 320,
+          height: logPanelHeight,
           overflow: 'auto',
           background: '#0F172A',
           fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace",

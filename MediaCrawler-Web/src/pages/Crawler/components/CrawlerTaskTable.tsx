@@ -29,6 +29,7 @@ interface Props {
   pageSize: number;
   rerunPending: boolean;
   executePending: boolean;
+  stoppingTaskId: number | null;
   onStatusChange: (v: string | undefined) => void;
   onPlatformChange: (v: string | undefined) => void;
   onPageChange: (p: number) => void;
@@ -52,6 +53,7 @@ export default function CrawlerTaskTable({
   pageSize,
   rerunPending,
   executePending,
+  stoppingTaskId,
   onStatusChange,
   onPlatformChange,
   onPageChange,
@@ -142,7 +144,7 @@ export default function CrawlerTaskTable({
               danger
               size="small"
               icon={<StopOutlined />}
-              loading={stopPending}
+              loading={stoppingTaskId === r.id}
               onClick={(e) => {
                 e.stopPropagation();
                 onStop(r.id);

@@ -218,17 +218,17 @@ async def finish_task(task_id: int, body: TaskFinishRequest):
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
-    if body.status not in ("completed", "failed"):
+    if body.status not in ("completed", "failed", "cancelled"):
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid status: {body.status}, must be 'completed' or 'failed'",
+            detail=f"Invalid status: {body.status}, must be 'completed', 'failed' or 'cancelled'",
         )
 
-    success = body.status == "completed"
     await ConfigService.mark_task_finished(
         task_id=task_id,
-        success=success,
+        success=body.status == "completed",
         error_message=body.error if body.error else None,
+        status=body.status,
     )
 
     return {

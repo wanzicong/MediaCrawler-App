@@ -227,12 +227,12 @@ class ConfigService:
 
     @staticmethod
     async def mark_task_finished(
-        task_id: int, success: bool, error_message: Optional[str] = None
+        task_id: int, success: bool, error_message: Optional[str] = None, status: str = ""
     ) -> None:
         async with get_mysql_session() as session:
             task = await session.get(CrawlerTask, task_id)
             if task:
-                task.status = "completed" if success else "failed"
+                task.status = status or ("completed" if success else "failed")
                 task.finished_at = datetime.utcnow()
                 task.error_message = error_message
 

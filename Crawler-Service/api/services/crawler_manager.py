@@ -378,29 +378,73 @@ class CrawlerManager:
     async def stop(self, task_id: Optional[int] = None) -> dict:
         """停止爬虫进程。task_id=None 停止所有，否则停止指定任务"""
         to_kill: List[tuple] = []
+        orphan_ids: List[int] = []
 
         async with self._lock:
             if task_id is not None:
                 pinfo = self._processes.get(task_id)
                 if not pinfo:
-                    return {"stopped": False, "error": f"Task #{task_id} not running"}
-                to_kill.append((task_id, pinfo))
+                    # 进程不在内存中（可能是服务重启后孤儿进程），尝试 OS 级别杀进程
+                    orphan_ids.append(task_id)
+                else:
+                    to_kill.append((task_id, pinfo))
             else:
-                self._task_queue.clear()  # 防止 stop 后任务自动重启
+                self._task_queue.clear()
                 for tid in list(self._processes.keys()):
                     to_kill.append((tid, self._processes[tid]))
 
+        # 处理孤儿进程：通过命令行 --task-id 查找并杀死
+        for tid in orphan_ids:
+            killed = await self._kill_orphan_process(tid)
+            if killed:
+                to_kill.append((tid, None))
+            # 无论是否找到进程，都更新数据库状态
+            await self._mark_task_finished_via_api(tid, False, "用户手动停止", status="cancelled")
+
         # 在锁外杀进程，不阻塞其他 API 操作
         for tid, pinfo in to_kill:
-            await self._kill_process(pinfo, tid)
-
+            if pinfo:
+                await self._kill_process(pinfo, tid)
             async with self._lock:
                 self._cleanup_task(tid)
 
-            # 更新数据库任务状态为 cancelled
-            await self._mark_task_finished_via_api(tid, False, "用户手动停止", status="cancelled")
+            if pinfo:
+                await self._mark_task_finished_via_api(tid, False, "用户手动停止", status="cancelled")
 
-        return {"stopped": True, "task_ids": [t[0] for t in to_kill]}
+        stopped_ids = [t[0] for t in to_kill] + orphan_ids
+        return {"stopped": True, "task_ids": stopped_ids}
+
+    async def _kill_orphan_process(self, task_id: int) -> bool:
+        """通过 OS 命令行查找并杀死 --task-id {task_id} 的孤儿 Python 进程"""
+        import sys
+        try:
+            if sys.platform == "win32":
+                result = subprocess.run(
+                    ["wmic", "process", "where", f"commandline like '%--task-id {task_id}%'", "get", "processid"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                lines = result.stdout.strip().splitlines()
+                for line in lines:
+                    pid_str = line.strip()
+                    if pid_str.isdigit():
+                        subprocess.run(["taskkill", "/F", "/PID", pid_str], capture_output=True)
+                        entry = self._create_log_entry(
+                            f"Killed orphan process PID {pid_str} for task #{task_id}", "warning", task_id
+                        )
+                        await self._push_log(entry)
+                        return True
+            else:
+                result = subprocess.run(
+                    ["pgrep", "-f", f"--task-id {task_id}"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                for pid_str in result.stdout.strip().splitlines():
+                    if pid_str.strip().isdigit():
+                        subprocess.run(["kill", "-9", pid_str.strip()], capture_output=True)
+                        return True
+        except Exception:
+            pass
+        return False
 
     async def _kill_process(self, pinfo: dict, task_id: int):
         """终止单个进程"""
