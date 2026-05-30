@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Modal,
@@ -9,7 +9,13 @@ import {
   Badge,
   Typography,
   Empty,
+  Button,
 } from 'antd';
+import {
+  ColumnHeightOutlined,
+  FullscreenExitOutlined,
+  FullscreenOutlined,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { fetchTaskLogs } from '@/api/modules/crawler';
 
@@ -36,6 +42,9 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 const ALL_LEVELS = ['info', 'warning', 'error', 'success', 'debug'];
+const MIN_LOG_H = 200;
+const DEFAULT_LOG_H = 400;
+const MAX_LOG_H = typeof window !== 'undefined' ? window.innerHeight - 200 : 800;
 
 export default function TaskLogViewer({ taskId, open, onClose }: Props) {
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
@@ -43,8 +52,12 @@ export default function TaskLogViewer({ taskId, open, onClose }: Props) {
   const [pageSize] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
+  const [logHeight, setLogHeight] = useState(DEFAULT_LOG_H);
+  const [isResizing, setIsResizing] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const resizeStartY = useRef(0);
+  const resizeStartH = useRef(DEFAULT_LOG_H);
 
-  // Build level filter param: only pass selected levels if some (not all) are selected
   const levelParam =
     selectedLevels.length > 0 && selectedLevels.length < ALL_LEVELS.length
       ? selectedLevels.join(',')
@@ -53,29 +66,36 @@ export default function TaskLogViewer({ taskId, open, onClose }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ['task-logs', taskId, levelParam, page, pageSize],
     queryFn: () =>
-      fetchTaskLogs(taskId!, {
-        level: levelParam,
-        page,
-        page_size: pageSize,
-      }),
+      fetchTaskLogs(taskId!, { level: levelParam, page, page_size: pageSize }),
     enabled: !!taskId && open,
     refetchInterval: open ? 5000 : false,
   });
 
-  // Reset filters when modal opens with a new task
   useEffect(() => {
     if (open) {
       setSelectedLevels([]);
       setPage(1);
+      setLogHeight(DEFAULT_LOG_H);
+      setIsFullscreen(false);
     }
   }, [open, taskId]);
 
-  // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
     if (autoScrollRef.current && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
   }, [data?.logs]);
+
+  // ESC key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   const handleScroll = () => {
     if (!containerRef.current) return;
@@ -85,15 +105,43 @@ export default function TaskLogViewer({ taskId, open, onClose }: Props) {
 
   const toggleLevel = (level: string) => {
     setSelectedLevels((prev) => {
-      if (prev.includes(level)) {
-        return prev.filter((l) => l !== level);
-      }
+      if (prev.includes(level)) return prev.filter((l) => l !== level);
       return [...prev, level];
     });
     setPage(1);
   };
 
   const formatTime = (recordedAt: string) => dayjs(recordedAt).format('HH:mm:ss');
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    resizeStartY.current = e.clientY;
+    resizeStartH.current = logHeight;
+  }, [logHeight]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientY - resizeStartY.current;
+      const newHeight = Math.min(MAX_LOG_H, Math.max(MIN_LOG_H, resizeStartH.current + delta));
+      setLogHeight(newHeight);
+    };
+    const handleMouseUp = () => setIsResizing(false);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const modalStyle = isFullscreen ? {
+    top: 0,
+    maxWidth: '100vw',
+    margin: 0,
+    paddingBottom: 0,
+  } : {};
 
   return (
     <Modal
@@ -108,46 +156,55 @@ export default function TaskLogViewer({ taskId, open, onClose }: Props) {
       }
       open={open}
       onCancel={onClose}
-      width={900}
+      width={isFullscreen ? '100vw' : 900}
       footer={null}
       destroyOnClose
+      style={modalStyle}
+      styles={isFullscreen ? { body: { height: 'calc(100vh - 110px)', overflow: 'auto' } } : undefined}
     >
-      {/* Level filter bar */}
-      <Space wrap style={{ marginBottom: 12 }}>
-        {ALL_LEVELS.map((level) => {
-          const isSelected = selectedLevels.includes(level);
-          const color = LEVEL_COLORS[level];
-          return (
-            <Tag
-              key={level}
-              color={isSelected ? color : undefined}
-              style={{
-                cursor: 'pointer',
-                fontSize: 12,
-                lineHeight: '20px',
-                margin: 0,
-                ...(isSelected
-                  ? {}
-                  : {
-                      borderColor: color,
-                      color,
-                      backgroundColor: 'transparent',
-                    }),
-              }}
-              onClick={() => toggleLevel(level)}
-            >
-              {LEVEL_LABELS[level]}
-            </Tag>
-          );
-        })}
+      <Space wrap style={{ marginBottom: 12, width: '100%', justifyContent: 'space-between' }}>
+        <Space wrap>
+          {ALL_LEVELS.map((level) => {
+            const isSelected = selectedLevels.includes(level);
+            const color = LEVEL_COLORS[level];
+            return (
+              <Tag
+                key={level}
+                color={isSelected ? color : undefined}
+                style={{
+                  cursor: 'pointer', fontSize: 12, lineHeight: '20px', margin: 0,
+                  ...(isSelected ? {} : { borderColor: color, color, backgroundColor: 'transparent' }),
+                }}
+                onClick={() => toggleLevel(level)}
+              >
+                {LEVEL_LABELS[level]}
+              </Tag>
+            );
+          })}
+        </Space>
+        <Space size={4}>
+          <Button
+            type="text"
+            size="small"
+            icon={<ColumnHeightOutlined />}
+            onClick={() => setLogHeight(logHeight < 500 ? 600 : DEFAULT_LOG_H)}
+            title="切换日志高度"
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            title={isFullscreen ? '退出全屏 (Esc)' : '全屏'}
+          />
+        </Space>
       </Space>
 
-      {/* Log display area */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
         style={{
-          height: 400,
+          height: isFullscreen ? 'calc(100vh - 190px)' : logHeight,
           overflow: 'auto',
           background: '#0F172A',
           fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
@@ -158,23 +215,30 @@ export default function TaskLogViewer({ taskId, open, onClose }: Props) {
           marginBottom: 12,
         }}
       >
+        {/* drag handle at bottom */}
+        {!isFullscreen && (
+          <div
+            onMouseDown={handleResizeStart}
+            style={{
+              height: 5,
+              cursor: 'ns-resize',
+              background: isResizing ? '#1677ff' : '#1E293B',
+              borderTop: '1px solid #334155',
+              position: 'sticky',
+              bottom: 0,
+              userSelect: 'none',
+            }}
+            title="拖拽调整日志高度"
+          />
+        )}
         {isLoading ? (
           <div style={{ padding: 16 }}>
             <Skeleton active paragraph={{ rows: 8 }} />
           </div>
         ) : !data || data.logs.length === 0 ? (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-            }}
-          >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <Empty
-              description={
-                <Typography.Text style={{ color: '#64748B' }}>暂无日志记录</Typography.Text>
-              }
+              description={<Typography.Text style={{ color: '#64748B' }}>暂无日志记录</Typography.Text>}
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           </div>
@@ -183,54 +247,20 @@ export default function TaskLogViewer({ taskId, open, onClose }: Props) {
             const color = LEVEL_COLORS[entry.level] || LEVEL_COLORS.info;
             const label = LEVEL_LABELS[entry.level] || entry.level.toUpperCase();
             return (
-              <div
-                key={entry.id}
-                style={{
-                  padding: '1px 12px',
-                  display: 'flex',
-                  gap: 8,
-                  alignItems: 'flex-start',
-                }}
-              >
-                <span
-                  style={{
-                    color: '#475569',
-                    flexShrink: 0,
-                    width: 62,
-                    textAlign: 'right',
-                  }}
-                >
+              <div key={entry.id} style={{ padding: '1px 12px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ color: '#475569', flexShrink: 0, width: 62, textAlign: 'right' }}>
                   {formatTime(entry.recorded_at)}
                 </span>
-                <Tag
-                  color={color}
-                  style={{
-                    fontSize: 10,
-                    lineHeight: '16px',
-                    margin: '2px 0',
-                    flexShrink: 0,
-                    minWidth: 38,
-                    textAlign: 'center' as const,
-                  }}
-                >
+                <Tag color={color} style={{ fontSize: 10, lineHeight: '16px', margin: '2px 0', flexShrink: 0, minWidth: 38, textAlign: 'center' as const }}>
                   {label}
                 </Tag>
-                <span
-                  style={{
-                    color,
-                    wordBreak: 'break-all',
-                    whiteSpace: 'pre-wrap',
-                  }}
-                >
-                  {entry.message}
-                </span>
+                <span style={{ color, wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{entry.message}</span>
               </div>
             );
           })
         )}
       </div>
 
-      {/* Pagination */}
       {data && data.total > 0 && (
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <Pagination
