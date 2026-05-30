@@ -85,6 +85,8 @@ def _apply_platform_ids(platform: str, payload: dict[str, Any]) -> None:
             config.WEIBO_SPECIFIED_ID_LIST = specified_list
         elif platform == "ks":
             config.KS_SPECIFIED_ID_LIST = specified_list
+        elif platform == "zhihu":
+            config.ZHIHU_SPECIFIED_ID_LIST = specified_list
         elif platform == "tieba":
             import re
 
@@ -106,6 +108,11 @@ def _apply_platform_ids(platform: str, payload: dict[str, Any]) -> None:
             config.WEIBO_CREATOR_ID_LIST = creator_list
         elif platform == "ks":
             config.KS_CREATOR_ID_LIST = creator_list
+        elif platform == "zhihu":
+            config.ZHIHU_CREATOR_URL_LIST = [
+                item if item.startswith("http") else f"https://www.zhihu.com/people/{item}"
+                for item in creator_list
+            ]
         elif platform == "tieba":
             config.TIEBA_CREATOR_URL_LIST = [
                 item

@@ -1,12 +1,13 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   App, Button, Card, Descriptions, Divider, Skeleton, Space, Tag, Typography, Result, Empty,
 } from 'antd';
 import {
-  ArrowLeftOutlined, ExportOutlined, LikeOutlined, CommentOutlined, ClockCircleOutlined, UserOutlined,
+  ArrowLeftOutlined, ExportOutlined, LikeOutlined, CommentOutlined, ClockCircleOutlined, UserOutlined, RocketOutlined,
 } from '@ant-design/icons';
 import { fetchDbData } from '@/api';
+import { startCrawler } from '@/api/modules/crawler';
 import PageHeader from '@/components/PageHeader';
 import { FIELD_LABELS, ZHIHU_CONTENT_TYPE_LABELS } from '@/constants';
 import { formatText } from '@/utils/format';
@@ -23,7 +24,7 @@ function sanitizeHtml(html: string): string {
 export default function ZhihuDetailPage() {
   const { contentId } = useParams<{ contentId: string }>();
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['zhihu-detail', contentId],
@@ -38,6 +39,38 @@ export default function ZhihuDetailPage() {
     enabled: !!contentId,
     retry: false,
   });
+
+  // 爬取当前作者全部信息
+  const crawlCreatorMut = useMutation({
+    mutationFn: (creatorId: string) =>
+      startCrawler({
+        platform: 'zhihu',
+        crawler_type: 'creator',
+        creator_ids: creatorId,
+        execute_now: true,
+      }),
+    onSuccess: (res) => {
+      message.success(`作者爬取任务已启动 (ID: ${res.task_id})`);
+    },
+  });
+
+  const handleCrawlCreator = () => {
+    const urlToken = (data?.user_url_token as string) || '';
+    const userLink = (data?.user_link as string) || '';
+    let creatorId = urlToken || userLink?.split('/').pop() || '';
+    creatorId = creatorId?.split('?')[0] || '';
+    if (!creatorId) {
+      message.warning('无法获取作者ID');
+      return;
+    }
+    modal.confirm({
+      title: '爬取作者全部信息',
+      content: `确认对作者「${(data?.user_nickname as string) || creatorId}」启动爬取任务？将爬取其所有回答/文章/视频。`,
+      okText: '启动爬取',
+      cancelText: '取消',
+      onOk: () => crawlCreatorMut.mutate(creatorId),
+    });
+  };
 
   if (isLoading) {
     return (
@@ -87,6 +120,14 @@ export default function ZhihuDetailPage() {
                 查看原文
               </Button>
             )}
+            <Button
+              type="primary"
+              icon={<RocketOutlined />}
+              loading={crawlCreatorMut.isPending}
+              onClick={handleCrawlCreator}
+            >
+              爬取作者全部信息
+            </Button>
           </Space>
         }
       />

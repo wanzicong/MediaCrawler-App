@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Col, Empty, Image, Pagination, Row, Skeleton, Typography, Result, Space, Tag } from 'antd';
-import { CloudDownloadOutlined, ExportOutlined, EyeOutlined, LikeOutlined, PlayCircleOutlined, CommentOutlined, ReadOutlined } from '@ant-design/icons';
+import { CloudDownloadOutlined, ExportOutlined, EyeOutlined, LikeOutlined, PlayCircleOutlined, CommentOutlined, ReadOutlined, RocketOutlined } from '@ant-design/icons';
 import { CONTENT_ID_FIELDS, getPlatformUrl, PLATFORM_LABELS, ZHIHU_CONTENT_TYPE_LABELS } from '@/constants';
 import { normalizeImageUrl, isImageUrl } from '@/utils/format';
 import { FIELD_LABELS, IMAGE_FIELDS } from '@/constants';
@@ -21,6 +21,8 @@ interface Props {
   onViewComments: (contentId: string) => void;
   onCrawlComments?: (contentId: string) => void;
   crawlPending?: boolean;
+  onCrawlCreator?: (row: Record<string, unknown>) => void;
+  creatorCrawlPending?: boolean;
 }
 
 const COVER_FIELDS = ['video_cover_url', 'cover_url', 'image_list'];
@@ -49,7 +51,7 @@ function getStatValue(row: Record<string, unknown>, fields: string[]): string | 
 }
 
 export default function DataCardView({
-  dataSource, isLoading, isError, error, platform, kind, page, pageSize, total, onPageChange, onPageSizeChange, onCardClick, onViewComments, onCrawlComments, crawlPending,
+  dataSource, isLoading, isError, error, platform, kind, page, pageSize, total, onPageChange, onPageSizeChange, onCardClick, onViewComments, onCrawlComments, crawlPending, onCrawlCreator, creatorCrawlPending,
 }: Props) {
   const navigate = useNavigate();
   if (isLoading) {
@@ -167,17 +169,31 @@ export default function DataCardView({
                           评论
                         </Button>
                         {platform === 'zhihu' && (
-                          <Button
-                            type="link"
-                            size="small"
-                            icon={<ReadOutlined />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/zhihu/${cid}`);
-                            }}
-                          >
-                            全文
-                          </Button>
+                          <>
+                            <Button
+                              type="link"
+                              size="small"
+                              icon={<ReadOutlined />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/zhihu/${cid}`);
+                              }}
+                            >
+                              全文
+                            </Button>
+                            <Button
+                              type="link"
+                              size="small"
+                              icon={<RocketOutlined />}
+                              loading={creatorCrawlPending}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onCrawlCreator?.(row);
+                              }}
+                            >
+                              爬取作者
+                            </Button>
+                          </>
                         )}
                         {onCrawlComments && (
                           <Button

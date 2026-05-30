@@ -11,7 +11,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { AppstoreOutlined, BarChartOutlined, CloudDownloadOutlined, DeleteOutlined, ExportOutlined, EyeOutlined, ReadOutlined, SearchOutlined, UnorderedListOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, BarChartOutlined, CloudDownloadOutlined, DeleteOutlined, ExportOutlined, EyeOutlined, ReadOutlined, RocketOutlined, SearchOutlined, UnorderedListOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -25,6 +25,7 @@ import {
   fetchAvailableTasks,
 } from '@/api';
 import { analyzeComments, type AnalyzeResponse } from '@/api/modules/ai';
+import { startCrawler } from '@/api/modules/crawler';
 import { commentAsync } from '@/api/modules/comments';
 import PageHeader from '@/components/PageHeader';
 import { isImageUrl, formatText, normalizeImageUrl } from '@/utils/format';
@@ -203,6 +204,40 @@ export default function DataPage() {
     crawlCommentMutation.mutate(cid);
   }, [crawlCommentMutation]);
 
+  // 爬取作者全部信息
+  const crawlCreatorMutation = useMutation({
+    mutationFn: (creatorIds: string) =>
+      startCrawler({
+        platform: platform as 'zhihu',
+        crawler_type: 'creator',
+        creator_ids: creatorIds,
+        execute_now: true,
+      }),
+    onSuccess: (res) => {
+      message.success(`作者爬取任务已启动 (ID: ${res.task_id})`);
+    },
+  });
+
+  const handleCrawlCreator = useCallback((row: Record<string, unknown>) => {
+    const urlToken = (row.user_url_token as string) || '';
+    const userLink = (row.user_link as string) || '';
+    // 优先使用 user_url_token，否则从 user_link 中提取
+    let creatorId = urlToken || userLink?.split('/').pop() || '';
+    // 处理可能包含查询参数的情况
+    creatorId = creatorId?.split('?')[0] || '';
+    if (!creatorId) {
+      message.warning('无法获取作者ID');
+      return;
+    }
+    modal.confirm({
+      title: '爬取作者全部信息',
+      content: `确认对作者「${(row.user_nickname as string) || creatorId}」启动爬取任务？将爬取其所有回答/文章/视频。`,
+      okText: '启动爬取',
+      cancelText: '取消',
+      onOk: () => crawlCreatorMutation.mutate(creatorId),
+    });
+  }, [crawlCreatorMutation, modal, message]);
+
   const abortRef = useRef<AbortController | null>(null);
 
   const handleAnalyzeComments = useCallback(async (contentId: string) => {
@@ -360,17 +395,31 @@ export default function DataPage() {
               </>
             )}
             {platform === 'zhihu' && kind === 'contents' && cid && (
-              <Button
-                type="link"
-                size="small"
-                icon={<ReadOutlined />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/zhihu/${cid}`);
-                }}
-              >
-                查看全文
-              </Button>
+              <>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<ReadOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/zhihu/${cid}`);
+                  }}
+                >
+                  查看全文
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<RocketOutlined />}
+                  loading={crawlCreatorMutation.isPending}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCrawlCreator(r);
+                  }}
+                >
+                  爬取作者
+                </Button>
+              </>
             )}
             <Button
               type="link"
@@ -395,7 +444,7 @@ export default function DataPage() {
     };
 
     return [...dataCols, actionCol];
-  }, [importantFields, platform, kind, contentIdField, deleteMutation, modal, analyzingContentId, analysisLoading, handleAnalyzeComments]);
+  }, [importantFields, platform, kind, contentIdField, deleteMutation, crawlCreatorMutation, handleCrawlCreator, modal, analyzingContentId, analysisLoading, handleAnalyzeComments, navigate]);
 
   const allFields = useMemo(() => {
     if (!detailRow) return [];
@@ -575,6 +624,8 @@ export default function DataPage() {
             }}
             onCrawlComments={handleCrawlComments}
             crawlPending={crawlCommentMutation.isPending}
+            onCrawlCreator={handleCrawlCreator}
+            creatorCrawlPending={crawlCreatorMutation.isPending}
           />
         )}
 
