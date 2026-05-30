@@ -75,13 +75,13 @@ class DouYinCrawler(AbstractCrawler):
         async with async_playwright() as playwright:
             # headless 时优先使用 Playwright 原生 headless（最可靠），非 headless 时用 CDP
             _use_headless = config.CDP_HEADLESS or config.HEADLESS
-            if config.ENABLE_CDP_MODE and not _use_headless:
+            if config.ENABLE_CDP_MODE:
                 utils.logger.info("[DouYinCrawler] 使用CDP模式启动浏览器")
                 self.browser_context = await self.launch_browser_with_cdp(
                     playwright,
                     playwright_proxy_format,
                     None,
-                    headless=False,
+                    headless=_use_headless,
                 )
             else:
                 utils.logger.info(f"[DouYinCrawler] 使用标准模式启动浏览器 (headless={_use_headless})")

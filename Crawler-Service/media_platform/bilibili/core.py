@@ -80,13 +80,13 @@ class BilibiliCrawler(AbstractCrawler):
             # headless=True 时优先使用 Playwright 原生 headless（最可靠），
             # 非 headless 或明确要求 CDP 时走 CDP 子进程模式
             _use_headless = config.CDP_HEADLESS or config.HEADLESS
-            if config.ENABLE_CDP_MODE and not _use_headless:
+            if config.ENABLE_CDP_MODE:
                 utils.logger.info("[BilibiliCrawler] Launching browser using CDP mode")
                 self.browser_context = await self.launch_browser_with_cdp(
                     playwright,
                     playwright_proxy_format,
                     self.user_agent,
-                    headless=False,
+                    headless=_use_headless,
                 )
             else:
                 utils.logger.info(f"[BilibiliCrawler] Launching browser using standard mode (headless={_use_headless})")

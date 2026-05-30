@@ -275,7 +275,7 @@ class CDPBrowserManager:
             user_data_dir = os.path.join(
                 os.getcwd(),
                 "browser_data",
-                f"cdp_{config.USER_DATA_DIR % config.PLATFORM}",
+                config.USER_DATA_DIR % config.PLATFORM,
             )
             os.makedirs(user_data_dir, exist_ok=True)
             utils.logger.info(
