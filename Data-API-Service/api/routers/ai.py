@@ -543,3 +543,206 @@ async def analyze_comments(req: AnalyzeRequest):
         summary=summary_text,
         hot_topics=hot_topics_data,
     )
+
+
+# ── Batch Analyze Articles + Comments ──────────────────────────────
+
+class BatchAnalyzeRequest(BaseModel):
+    platform: str = "zhihu"
+    max_articles: int = 50  # 最多分析文章数
+
+
+class ArticleInsight(BaseModel):
+    title: str
+    comment_count: int
+    insight: str  # AI 对该文章的洞察
+
+
+class BatchAnalyzeResponse(BaseModel):
+    platform: str
+    article_count: int
+    total_comment_count: int
+    overall_summary: str  # 整体概览
+    key_themes: list[str]  # 核心主题
+    sentiment: SentimentAnalysis  # 整体情感分布
+    article_insights: list[ArticleInsight]  # 单篇文章洞察（最多 20 篇）
+    suggestions: list[str]  # AI 建议
+
+
+@router.post("/batch-analyze", response_model=BatchAnalyzeResponse)
+async def batch_analyze(req: BatchAnalyzeRequest):
+    # ── 阶段 1: 校验平台 ─────────────────────────────────────────
+    if req.platform not in PLATFORM_META:
+        raise HTTPException(400, f"不支持的平台: {req.platform}")
+
+    max_articles = min(req.max_articles, 50)
+
+    # ── 阶段 2: 获取文章列表 ─────────────────────────────────────
+    try:
+        result = await DataQueryService.query(
+            platform=req.platform,
+            kind="contents",
+            page=1,
+            page_size=max_articles,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    articles = result.get("items", [])
+    if not articles:
+        raise HTTPException(400, "没有可分析的文章数据")
+
+    # ── 阶段 3: 为每篇文章获取评论 + 构建分析数据 ─────────────────
+    article_data: list[dict] = []
+    total_comments = 0
+
+    for article in articles:
+        content_id = str(article.get("content_id", ""))
+        title = str(article.get("title", "无标题"))
+        content_text = str(article.get("content_text", article.get("content", "")))[:500]
+        comment_count_val = article.get("comment_count", 0)
+        try:
+            comment_count_val = int(comment_count_val) if comment_count_val else 0
+        except (ValueError, TypeError):
+            comment_count_val = 0
+
+        # 获取评论（最多 100 条）
+        comments: list[str] = []
+        try:
+            comment_result = await DataQueryService.query_comments_by_content(
+                platform=req.platform,
+                content_id=content_id,
+                page=1,
+                page_size=100,
+            )
+            for item in comment_result.get("items", []):
+                c = item.get("content", "")
+                if c and isinstance(c, str):
+                    c = c.strip()
+                    if c:
+                        comments.append(c[:200])  # 每条评论截断
+        except Exception:
+            pass
+
+        total_comments += len(comments)
+
+        article_data.append({
+            "title": title,
+            "content_text": content_text,
+            "comment_count": comment_count_val,
+            "comments": comments,
+        })
+
+    # ── 阶段 4: 构建 Prompt ──────────────────────────────────────
+    articles_desc: list[str] = []
+    for i, ad in enumerate(article_data):
+        comments_sample = ad["comments"][:20]  # 每篇最多取 20 条评论
+        comments_text = "\n      ".join(
+            f"评{j+1}. {c}" for j, c in enumerate(comments_sample)
+        ) if comments_sample else "（无评论）"
+
+        articles_desc.append(
+            f"文章{i+1}：{ad['title']}\n"
+            f"  内容摘要：{ad['content_text'][:300]}\n"
+            f"  评论数：{ad['comment_count']}，评论采样：\n"
+            f"      {comments_text}"
+        )
+
+    all_articles_text = "\n\n".join(articles_desc)
+
+    prompt = f"""请全面分析以下知乎文章及其评论数据，返回严格的JSON格式分析结果。
+
+数据概览：
+- 共 {len(article_data)} 篇文章
+- 总计 {total_comments} 条评论参与分析
+
+文章及评论数据：
+{all_articles_text}
+
+要求返回以下JSON结构（只返回JSON，不要markdown代码块，不要任何额外文字）：
+{{
+    "overall_summary": "整体概览：对这批文章的主题分布、讨论热度、观点倾向做 200 字以内的综合概述",
+    "key_themes": ["核心主题1", "核心主题2", ...] (3-8个主题词),
+    "sentiment": {{
+        "positive": 正面评论百分比(整数),
+        "neutral": 中性评论百分比(整数),
+        "negative": 负面评论百分比(整数),
+        "summary": "情感分析小结，用中文"
+    }},
+    "article_insights": [
+        {{"title": "文章标题", "comment_count": 评论数(int), "insight": "对该文章内容及评论的核心洞察（50字内）"}}
+    ] (最多输出 20 篇，按讨论热度或争议度排序),
+    "suggestions": ["运营建议1", "运营建议2", ...] (3-5条基于数据洞察的实质性建议)
+}}
+
+注意：positive + neutral + negative 之和必须等于 100。"""
+
+    # ── 阶段 5: 调用 DeepSeek API ────────────────────────────────
+    api_key = _get_api_key()
+    if not api_key:
+        raise HTTPException(500, "未配置 DEEPSEEK_API_KEY")
+
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        try:
+            resp = await client.post(
+                f"{DEEPSEEK_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 4096,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            ai_text = data["choices"][0]["message"]["content"]
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(e.response.status_code, f"DeepSeek API 错误: {e.response.text}")
+        except Exception as e:
+            raise HTTPException(500, f"请求失败: {str(e)}")
+
+    # ── 阶段 6: 解析 JSON ────────────────────────────────────────
+    parsed: dict = {}
+    raw_text = ai_text.strip()
+    if raw_text.startswith("```"):
+        lines = raw_text.split("\n")
+        if len(lines) >= 3:
+            lines = lines[1:]
+            if lines[-1].strip() == "```":
+                lines = lines[:-1]
+            raw_text = "\n".join(lines)
+
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        raise HTTPException(500, f"AI 返回内容无法解析为 JSON: {ai_text[:500]}")
+
+    # ── 阶段 7: 构造响应 ─────────────────────────────────────────
+    sentiment_data = parsed.get("sentiment", {})
+    insights_data = parsed.get("article_insights", [])
+
+    return BatchAnalyzeResponse(
+        platform=req.platform,
+        article_count=len(article_data),
+        total_comment_count=total_comments,
+        overall_summary=parsed.get("overall_summary", ""),
+        key_themes=parsed.get("key_themes", []),
+        sentiment=SentimentAnalysis(
+            positive=round(sentiment_data.get("positive", 0)),
+            neutral=round(sentiment_data.get("neutral", 0)),
+            negative=round(sentiment_data.get("negative", 0)),
+            summary=sentiment_data.get("summary", ""),
+        ),
+        article_insights=[
+            ArticleInsight(
+                title=k.get("title", ""),
+                comment_count=k.get("comment_count", 0),
+                insight=k.get("insight", ""),
+            )
+            for k in insights_data[:20]
+        ],
+        suggestions=parsed.get("suggestions", []),
+    )

@@ -24,7 +24,7 @@ import {
   deleteDataRecord,
   fetchAvailableTasks,
 } from '@/api';
-import { analyzeComments, type AnalyzeResponse } from '@/api/modules/ai';
+import { analyzeComments, batchAnalyze, type AnalyzeResponse, type BatchAnalyzeResponse } from '@/api/modules/ai';
 import { startCrawler } from '@/api/modules/crawler';
 import { commentAsync } from '@/api/modules/comments';
 import PageHeader from '@/components/PageHeader';
@@ -68,6 +68,16 @@ export default function DataPage() {
   const [analyzingContentId, setAnalyzingContentId] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
+
+  // 批量分析
+  const [batchAnalysisResult, setBatchAnalysisResult] = useState<BatchAnalyzeResponse | null>(null);
+  const batchAnalyzeMutation = useMutation({
+    mutationFn: () => batchAnalyze({ platform, max_articles: 50 }),
+    onSuccess: (res) => {
+      setBatchAnalysisResult(res);
+      message.success(`批量分析完成：${res.article_count} 篇文章，${res.total_comment_count} 条评论`);
+    },
+  });
   const [commentModalCid, setCommentModalCid] = useState<string | null>(null);
   const [commentModalPage, setCommentModalPage] = useState(1);
   const [orderBy, setOrderBy] = useState('');
@@ -587,7 +597,19 @@ export default function DataPage() {
           onClear={handleClearFilters}
         />
 
-        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            {platform === 'zhihu' && kind === 'contents' && (
+              <Button
+                type="primary"
+                icon={<BarChartOutlined />}
+                loading={batchAnalyzeMutation.isPending}
+                onClick={() => batchAnalyzeMutation.mutate()}
+              >
+                AI 批量分析 ({Math.min(data?.total ?? 50, 50)} 篇文章)
+              </Button>
+            )}
+          </div>
           <Button.Group>
             <Button
               type={viewMode === 'table' ? 'primary' : 'default'}
@@ -717,6 +739,91 @@ export default function DataPage() {
           width={720}
         >
           {analysisResult && <AnalysisResultCard result={analysisResult} />}
+        </Modal>
+
+        {/* Batch Analysis Result Modal */}
+        <Modal
+          title={
+            <Space>
+              <BarChartOutlined style={{ color: '#6366f1' }} />
+              <span>AI 批量文章+评论分析</span>
+              {batchAnalysisResult && (
+                <>
+                  <Tag color="purple">{batchAnalysisResult.article_count} 篇文章</Tag>
+                  <Tag color="blue">{batchAnalysisResult.total_comment_count} 条评论</Tag>
+                </>
+              )}
+            </Space>
+          }
+          open={!!batchAnalysisResult}
+          onCancel={() => setBatchAnalysisResult(null)}
+          footer={null}
+          width={860}
+        >
+          {batchAnalysisResult && (
+            <div style={{ maxHeight: '70vh', overflow: 'auto' }}>
+              {/* 整体概览 */}
+              <Typography.Title level={5}>整体概览</Typography.Title>
+              <Typography.Paragraph>{batchAnalysisResult.overall_summary}</Typography.Paragraph>
+
+              {/* 核心主题 */}
+              <Typography.Title level={5}>核心主题</Typography.Title>
+              <Space wrap size={[4, 8]}>
+                {batchAnalysisResult.key_themes.map((t, i) => (
+                  <Tag key={i} color="purple">{t}</Tag>
+                ))}
+              </Space>
+
+              {/* 情感分布 */}
+              <Typography.Title level={5} style={{ marginTop: 16 }}>情感分布</Typography.Title>
+              <Space size={24}>
+                <Tag color="green" style={{ fontSize: 14, padding: '4px 12px' }}>
+                  正面 {batchAnalysisResult.sentiment.positive}%
+                </Tag>
+                <Tag color="blue" style={{ fontSize: 14, padding: '4px 12px' }}>
+                  中性 {batchAnalysisResult.sentiment.neutral}%
+                </Tag>
+                <Tag color="red" style={{ fontSize: 14, padding: '4px 12px' }}>
+                  负面 {batchAnalysisResult.sentiment.negative}%
+                </Tag>
+              </Space>
+              <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
+                {batchAnalysisResult.sentiment.summary}
+              </Typography.Paragraph>
+
+              {/* 文章洞察 */}
+              {batchAnalysisResult.article_insights.length > 0 && (
+                <>
+                  <Typography.Title level={5} style={{ marginTop: 16 }}>
+                    热门文章洞察 ({batchAnalysisResult.article_insights.length} 篇)
+                  </Typography.Title>
+                  {batchAnalysisResult.article_insights.map((item, i) => (
+                    <Card key={i} size="small" style={{ marginBottom: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Typography.Text strong style={{ flex: 1 }}>{item.title}</Typography.Text>
+                        <Tag>{item.comment_count} 评论</Tag>
+                      </div>
+                      <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
+                        {item.insight}
+                      </Typography.Paragraph>
+                    </Card>
+                  ))}
+                </>
+              )}
+
+              {/* 运营建议 */}
+              {batchAnalysisResult.suggestions.length > 0 && (
+                <>
+                  <Typography.Title level={5} style={{ marginTop: 16 }}>运营建议</Typography.Title>
+                  {batchAnalysisResult.suggestions.map((s, i) => (
+                    <Typography.Paragraph key={i} style={{ paddingLeft: 16, borderLeft: '3px solid #6366f1' }}>
+                      {s}
+                    </Typography.Paragraph>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
         </Modal>
       </Card>
 

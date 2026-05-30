@@ -107,3 +107,31 @@ export interface AnalyzeResponse {
 export function analyzeComments(data: AnalyzeRequest, signal?: AbortSignal) {
   return httpPost<AnalyzeResponse>('/api/ai/analyze-comments', data, { signal });
 }
+
+// ── Batch Analyze ──────────────────────────────────────────────
+
+export interface BatchAnalyzeRequest {
+  platform: string;
+  max_articles?: number;
+}
+
+export interface ArticleInsight {
+  title: string;
+  comment_count: number;
+  insight: string;
+}
+
+export interface BatchAnalyzeResponse {
+  platform: string;
+  article_count: number;
+  total_comment_count: number;
+  overall_summary: string;
+  key_themes: string[];
+  sentiment: SentimentResult;
+  article_insights: ArticleInsight[];
+  suggestions: string[];
+}
+
+export function batchAnalyze(data: BatchAnalyzeRequest, signal?: AbortSignal) {
+  return httpPost<BatchAnalyzeResponse>('/api/ai/batch-analyze', data, { signal });
+}
