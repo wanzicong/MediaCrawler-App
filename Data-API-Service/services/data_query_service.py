@@ -333,12 +333,12 @@ class DataQueryService:
             return []
 
         async with get_mysql_session() as session:
-            # 查询当前数据中的 DISTINCT task_id + 记录数
+            # 查询当前数据中的 DISTINCT task_id + 记录数，按 task_id 倒序（最新任务在前）
             stmt = (
                 select(model.task_id, func.count(model.id).label("record_count"))
                 .where(model.task_id.isnot(None))
                 .group_by(model.task_id)
-                .order_by(func.count(model.id).desc())
+                .order_by(model.task_id.desc())
             )
             rows = (await session.execute(stmt)).all()
 

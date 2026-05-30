@@ -41,16 +41,20 @@ from .help import *
 
 
 class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
+    # 浏览器断开重试配置
+    _MAX_PAGE_RETRIES = 3
+    _PAGE_RETRY_DELAY = 3.0
 
     def __init__(
         self,
-        timeout=60,  # If the crawl media option is turned on, Douyin’s short videos will require a longer timeout.
+        timeout=60,
         proxy=None,
         *,
         headers: Dict,
         playwright_page: Optional[Page],
         cookie_dict: Dict,
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        browser_context: Optional[BrowserContext] = None,
     ):
         self.proxy = proxy
         self.timeout = timeout
@@ -65,8 +69,44 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         ]
         self.playwright_page = playwright_page
         self.cookie_dict = cookie_dict
-        # Initialize proxy pool (from ProxyRefreshMixin)
+        self.browser_context = browser_context
         self.init_proxy_pool(proxy_ip_pool)
+
+    async def _recover_page(self) -> bool:
+        """浏览器页面断开后尝试恢复页面"""
+        if not self.browser_context:
+            return False
+        try:
+            existing_pages = list(self.browser_context.pages)
+            if existing_pages:
+                self.playwright_page = existing_pages[0]
+            else:
+                self.playwright_page = await self.browser_context.new_page()
+            utils.logger.warning("[DouYinClient] 浏览器页面已恢复")
+            return True
+        except Exception as e:
+            utils.logger.error(f"[DouYinClient] 页面恢复失败: {e}")
+            return False
+
+    async def _safe_evaluate(self, expression: str) -> Dict:
+        """安全执行 page.evaluate，支持断线重试"""
+        last_error = None
+        for attempt in range(self._MAX_PAGE_RETRIES):
+            try:
+                return await self.playwright_page.evaluate(expression)
+            except Exception as e:
+                last_error = e
+                err_msg = str(e)
+                if "Connection closed" in err_msg or "Target closed" in err_msg or "closed" in err_msg.lower():
+                    utils.logger.warning(
+                        f"[DouYinClient] page.evaluate 失败 (attempt {attempt+1}/{self._MAX_PAGE_RETRIES}): {err_msg[:100]}"
+                    )
+                    if attempt < self._MAX_PAGE_RETRIES - 1:
+                        await asyncio.sleep(self._PAGE_RETRY_DELAY)
+                        if await self._recover_page():
+                            continue
+                raise
+        raise last_error  # type: ignore
 
     async def __process_req_params(
         self,
@@ -79,7 +119,7 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         if not params:
             return
         headers = headers or self.headers
-        local_storage: Dict = await self.playwright_page.evaluate("() => window.localStorage")  # type: ignore
+        local_storage: Dict = await self._safe_evaluate("() => window.localStorage")
         common_params = {
             "device_platform": "webapp",
             "aid": "6383",
@@ -151,7 +191,7 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         return await self.request(method="POST", url=f"{self._host}{uri}", data=data, headers=headers)
 
     async def pong(self, browser_context: BrowserContext) -> bool:
-        local_storage = await self.playwright_page.evaluate("() => window.localStorage")
+        local_storage = await self._safe_evaluate("() => window.localStorage")
         if local_storage.get("HasUserLogin", "") == "1":
             return True
 

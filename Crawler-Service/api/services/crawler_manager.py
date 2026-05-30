@@ -112,14 +112,35 @@ class CrawlerManager:
                     pass  # 日志写入失败不影响主流程
 
     def _parse_log_level(self, line: str) -> str:
+        """解析日志级别：优先识别 Python 标准日志格式 (LEVEL:message)，再回退到关键词匹配"""
+        import re
+        # 优先匹配 Python 标准日志格式: "YYYY-MM-DD HH:MM:SS LoggerName LEVEL (file:line)"
+        # 或 "LEVEL: message" 或 "[LEVEL] message"
+        m = re.search(r'\b(?:ERROR|WARNING|WARN|INFO|DEBUG|SUCCESS)\b', line[:200])
+        if m:
+            level = m.group().upper()
+            if level in ("ERROR",):
+                return "error"
+            if level in ("WARNING", "WARN"):
+                return "warning"
+            if level in ("DEBUG",):
+                return "debug"
+            if level in ("SUCCESS",):
+                return "success"
+            # INFO matched → fall through to keyword check
+
+        # 回退：关键词匹配（仅匹配独立单词，避免数据内容中的 "error" 误判）
         line_upper = line.upper()
-        if "ERROR" in line_upper or "FAILED" in line_upper:
+        # 检查错误模式：ERROR/FAILED/CRITICAL 作为独立单词，不限结尾
+        if re.search(r'(?:^|\s|\[)(?:ERROR|FAILED|FAIL|CRITICAL)(?:\s|\]|:|$)', line_upper):
             return "error"
-        elif "WARNING" in line_upper or "WARN" in line_upper:
+        if "TRACEBACK" in line_upper or "EXCEPTION" in line_upper:
+            return "error"
+        if re.search(r'(?:^|\s|\[)WARNING(?:\s|\]|:)', line_upper) or re.search(r'(?:^|\s|\[)WARN(?:\s|\]|:)', line_upper):
             return "warning"
-        elif "SUCCESS" in line_upper or "完成" in line or "成功" in line:
+        if "完成" in line or "成功" in line:
             return "success"
-        elif "DEBUG" in line_upper:
+        if re.search(r'(?:^|\s|\[)DEBUG(?:\s|\]|:)', line_upper):
             return "debug"
         return "info"
 
