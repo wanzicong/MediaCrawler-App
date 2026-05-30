@@ -137,7 +137,6 @@ class BrowserLauncher:
             "--disable-prompt-on-repost",
             "--disable-sync",
             "--disable-dev-shm-usage",  # Avoid shared memory issues
-            "--no-sandbox",  # Disable sandbox in CDP mode
             # Key anti-detection arguments
             "--disable-blink-features=AutomationControlled",  # Disable automation control flag
             "--exclude-switches=enable-automation",  # Exclude automation switch
