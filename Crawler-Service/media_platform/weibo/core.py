@@ -77,13 +77,13 @@ class WeiboCrawler(AbstractCrawler):
         async with async_playwright() as playwright:
             # headless 时优先使用 Playwright 原生 headless（最可靠），非 headless 时用 CDP
             _use_headless = config.CDP_HEADLESS or config.HEADLESS
-            if config.ENABLE_CDP_MODE:
+            if config.ENABLE_CDP_MODE and not _use_headless:
                 utils.logger.info("[WeiboCrawler] Launching browser with CDP mode")
                 self.browser_context = await self.launch_browser_with_cdp(
                     playwright,
                     playwright_proxy_format,
                     self.mobile_user_agent,
-                    headless=_use_headless,
+                    headless=False,
                 )
             else:
                 utils.logger.info(f"[WeiboCrawler] Launching browser standard mode (headless={_use_headless})")
