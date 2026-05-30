@@ -160,7 +160,7 @@ export default function DataPage() {
     queryKey: ['db-data', platform, kind, page, pageSize, searchKeyword, filterTaskId, filterContentId, orderBy, orderDirection],
     queryFn: () => {
       if (filterTaskId) {
-        return fetchTaskData(platform, Number(filterTaskId), { page, page_size: pageSize });
+        return fetchTaskData(platform, Number(filterTaskId), { page, page_size: pageSize, order_by: orderBy || undefined, order_direction: orderDirection });
       }
       if (filterContentId && kind === 'comments') {
         return fetchContentComments(platform, filterContentId, { page, page_size: pageSize });

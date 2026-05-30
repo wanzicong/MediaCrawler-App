@@ -196,6 +196,8 @@ class DataQueryService:
         task_id: int,
         page: int = 1,
         page_size: int = 20,
+        order_by: Optional[str] = None,
+        order_direction: str = "desc",
     ) -> dict:
         meta = PLATFORM_META.get(platform)
         if not meta:
@@ -205,12 +207,27 @@ class DataQueryService:
         page_size = min(max(1, page_size), 200)
         offset = (page - 1) * page_size
 
+        # 排序字段（与通用 query 方法一致的 CAST 逻辑）
+        _NUMERIC_SORT_FIELDS = {
+            "video_play_count", "video_comment", "video_danmaku", "video_favorite_count",
+            "video_share_count", "video_coin_count", "viewd_count", "comment_count",
+            "share_count", "collected_count", "liked_count", "disliked_count",
+            "like_count", "sub_comment_count",
+        }
+        order_cols = []
+        if order_by and hasattr(model, order_by):
+            col = getattr(model, order_by)
+            if order_by in _NUMERIC_SORT_FIELDS:
+                col = cast(col, Integer)
+            order_cols.append(desc(col) if order_direction == "desc" else asc(col))
+        order_cols.append(model.id.desc())
+
         async with get_mysql_session() as session:
             count_stmt = select(func.count()).select_from(model).where(model.task_id == task_id)
             list_stmt = (
                 select(model)
                 .where(model.task_id == task_id)
-                .order_by(model.id.desc())
+                .order_by(*order_cols)
                 .offset(offset)
                 .limit(page_size)
             )

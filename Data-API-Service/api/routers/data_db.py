@@ -28,10 +28,12 @@ async def query_data_by_task(
     task_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
+    order_by: Optional[str] = None,
+    order_direction: str = Query("desc", pattern="^(asc|desc)$"),
 ):
     """按任务 ID 查询该平台爬取的内容数据"""
     try:
-        return await DataQueryService.query_by_task(platform, task_id, page, page_size)
+        return await DataQueryService.query_by_task(platform, task_id, page, page_size, order_by, order_direction)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
