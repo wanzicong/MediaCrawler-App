@@ -11,7 +11,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { AppstoreOutlined, BarChartOutlined, CloudDownloadOutlined, DeleteOutlined, ExportOutlined, EyeOutlined, ReadOutlined, RocketOutlined, SearchOutlined, UnorderedListOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, BarChartOutlined, CloudDownloadOutlined, DeleteOutlined, ExportOutlined, EyeOutlined, FullscreenExitOutlined, FullscreenOutlined, ReadOutlined, RocketOutlined, SearchOutlined, UnorderedListOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -72,7 +72,15 @@ export default function DataPage() {
   // 批量分析
   const [batchAnalysisResult, setBatchAnalysisResult] = useState<BatchAnalyzeResponse | null>(null);
   const batchAnalyzeMutation = useMutation({
-    mutationFn: () => batchAnalyze({ platform, max_articles: 50 }),
+    mutationFn: () => batchAnalyze({
+      platform,
+      max_articles: 50,
+      keyword: searchKeyword || undefined,
+      task_id: filterTaskId ? Number(filterTaskId) : undefined,
+      content_id: filterContentId || undefined,
+      order_by: orderBy || undefined,
+      order_direction: orderDirection,
+    }),
     onSuccess: (res) => {
       setBatchAnalysisResult(res);
       message.success(`批量分析完成：${res.article_count} 篇文章，${res.total_comment_count} 条评论`);
@@ -80,6 +88,7 @@ export default function DataPage() {
   });
   const [commentModalCid, setCommentModalCid] = useState<string | null>(null);
   const [commentModalPage, setCommentModalPage] = useState(1);
+  const [isCommentFullscreen, setIsCommentFullscreen] = useState(false);
   const [orderBy, setOrderBy] = useState('');
   const [orderDirection, setOrderDirection] = useState('desc');
   const [viewMode, setViewMode] = useState<'table' | 'card'>('card');
@@ -169,6 +178,17 @@ export default function DataPage() {
       setPlatform(enabledPlatforms[0].code);
     }
   }, [urlPlatform, enabledPlatforms, platform]);
+
+  // ESC 退出评论全屏
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isCommentFullscreen) {
+        setIsCommentFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCommentFullscreen]);
 
   // 评论弹窗数据
   const { data: commentModalData, isLoading: commentModalLoading } = useQuery({
@@ -678,18 +698,32 @@ export default function DataPage() {
 
         <Modal
           title={
-            <Space>
-              <EyeOutlined />
-              <span>评论列表</span>
-              {commentModalData && (
-                <Tag>{commentModalData.total} 条评论</Tag>
-              )}
-            </Space>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingRight: 32 }}>
+              <Space>
+                <EyeOutlined />
+                <span>评论列表</span>
+                {commentModalData && (
+                  <Tag>{commentModalData.total} 条评论</Tag>
+                )}
+              </Space>
+              <Button
+                type="text"
+                size="small"
+                icon={isCommentFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                onClick={() => setIsCommentFullscreen(!isCommentFullscreen)}
+                title={isCommentFullscreen ? '退出全屏 (Esc)' : '全屏'}
+              />
+            </div>
           }
           open={!!commentModalCid}
-          onCancel={() => setCommentModalCid(null)}
+          onCancel={() => {
+            setCommentModalCid(null);
+            setIsCommentFullscreen(false);
+          }}
           footer={null}
-          width={800}
+          width={isCommentFullscreen ? '100vw' : 800}
+          style={isCommentFullscreen ? { top: 0, maxWidth: '100vw', margin: 0, paddingBottom: 0 } : undefined}
+          styles={isCommentFullscreen ? { body: { height: 'calc(100vh - 110px)', overflow: 'auto' } } : undefined}
         >
           <Table
             rowKey="id"
@@ -697,7 +731,15 @@ export default function DataPage() {
             dataSource={commentModalData?.items ?? []}
             columns={[
               { title: 'ID', dataIndex: 'id', width: 60 },
-              { title: '评论内容', dataIndex: 'content', ellipsis: true, render: (v: unknown) => v ? String(v) : '—' },
+              {
+                title: '评论内容',
+                dataIndex: 'content',
+                render: (v: unknown) => (
+                  <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                    {v ? String(v) : '—'}
+                  </div>
+                ),
+              },
               {
                 title: '点赞',
                 dataIndex: 'like_count',
@@ -719,7 +761,7 @@ export default function DataPage() {
               showTotal: (t) => `共 ${t} 条`,
             }}
             size="small"
-            scroll={{ y: 400 }}
+            scroll={{ y: isCommentFullscreen ? 'calc(100vh - 250px)' : 400 }}
           />
         </Modal>
 

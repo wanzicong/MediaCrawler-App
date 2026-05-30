@@ -4,7 +4,7 @@ import json
 import re
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
-from typing import Any
+from typing import Any, Optional
 from pydantic import BaseModel
 import httpx
 from sqlalchemy import select, delete
@@ -550,6 +550,11 @@ async def analyze_comments(req: AnalyzeRequest):
 class BatchAnalyzeRequest(BaseModel):
     platform: str = "zhihu"
     max_articles: int = 50  # 最多分析文章数
+    keyword: Optional[str] = None  # 标题关键词筛选
+    task_id: Optional[int] = None  # 按爬取任务筛选
+    content_id: Optional[str] = None  # 按内容ID筛选
+    order_by: Optional[str] = None  # 排序字段
+    order_direction: str = "desc"  # 排序方向
 
 
 class ArticleInsight(BaseModel):
@@ -577,14 +582,40 @@ async def batch_analyze(req: BatchAnalyzeRequest):
 
     max_articles = min(req.max_articles, 50)
 
-    # ── 阶段 2: 获取文章列表 ─────────────────────────────────────
+    # ── 阶段 2: 获取文章列表（与前端列表页使用相同的查询逻辑）───
     try:
-        result = await DataQueryService.query(
-            platform=req.platform,
-            kind="contents",
-            page=1,
-            page_size=max_articles,
-        )
+        if req.task_id is not None:
+            # 按任务筛选：使用 query_by_task，与前端列表页一致
+            result = await DataQueryService.query_by_task(
+                platform=req.platform,
+                task_id=req.task_id,
+                page=1,
+                page_size=max_articles,
+                order_by=req.order_by,
+                order_direction=req.order_direction,
+            )
+        elif req.content_id:
+            # 按内容ID筛选：使用 query 的 content_id 过滤
+            result = await DataQueryService.query(
+                platform=req.platform,
+                kind="contents",
+                page=1,
+                page_size=max_articles,
+                content_id=req.content_id,
+                order_by=req.order_by,
+                order_direction=req.order_direction,
+            )
+        else:
+            # 默认：按关键词/排序等通用筛选
+            result = await DataQueryService.query(
+                platform=req.platform,
+                kind="contents",
+                page=1,
+                page_size=max_articles,
+                keyword=req.keyword,
+                order_by=req.order_by,
+                order_direction=req.order_direction,
+            )
     except ValueError as e:
         raise HTTPException(400, str(e))
 

@@ -113,6 +113,11 @@ export function analyzeComments(data: AnalyzeRequest, signal?: AbortSignal) {
 export interface BatchAnalyzeRequest {
   platform: string;
   max_articles?: number;
+  keyword?: string;
+  task_id?: number;
+  content_id?: string;
+  order_by?: string;
+  order_direction?: string;
 }
 
 export interface ArticleInsight {

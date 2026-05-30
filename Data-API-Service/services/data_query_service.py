@@ -104,6 +104,7 @@ class DataQueryService:
         content_id: Optional[str] = None,
         order_by: Optional[str] = None,
         order_direction: str = "desc",
+        task_id: Optional[int] = None,
     ) -> dict:
         meta = PLATFORM_META.get(platform)
         if not meta:
@@ -177,6 +178,10 @@ class DataQueryService:
                 elif hasattr(model, "content"):
                     count_stmt = count_stmt.where(model.content.like(pattern))
                     list_stmt = list_stmt.where(model.content.like(pattern))
+
+            if task_id is not None and hasattr(model, "task_id"):
+                count_stmt = count_stmt.where(model.task_id == task_id)
+                list_stmt = list_stmt.where(model.task_id == task_id)
 
             total = (await session.execute(count_stmt)).scalar() or 0
             rows = (await session.execute(list_stmt)).scalars().all()
