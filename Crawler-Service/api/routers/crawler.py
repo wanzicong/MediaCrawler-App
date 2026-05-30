@@ -55,10 +55,13 @@ async def list_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status: str = Query(None),
+    platform: str = Query(None),
 ):
     params = {"page": page, "page_size": page_size}
     if status:
         params["status"] = status
+    if platform:
+        params["platform"] = platform
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.get(f"{DATA_API_URL}/api/internal/tasks", params=params)
         resp.raise_for_status()
@@ -73,6 +76,19 @@ async def get_task_detail(task_id: int):
             raise HTTPException(status_code=404, detail="任务不存在")
         resp.raise_for_status()
         return resp.json()
+
+
+@router.post("/tasks/{task_id}/execute")
+async def execute_task(task_id: int):
+    """执行一个待执行（pending）的任务"""
+    result = await crawler_manager.execute_task(task_id)
+    if result.get("started"):
+        return {
+            "status": "ok",
+            "message": f"任务 #{task_id} 已开始执行",
+            "task_id": task_id,
+        }
+    raise HTTPException(status_code=400, detail=result.get("error", "执行失败"))
 
 
 @router.post("/tasks/{task_id}/rerun")

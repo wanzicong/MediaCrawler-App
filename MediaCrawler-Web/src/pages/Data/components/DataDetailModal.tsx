@@ -1,5 +1,6 @@
 import { Button, Descriptions, Modal, Space } from 'antd';
-import { DeleteOutlined } from '@ant-design/icons';
+import { DeleteOutlined, ExportOutlined } from '@ant-design/icons';
+import { getPlatformUrl, PLATFORM_LABELS } from '@/constants';
 
 interface FieldItem {
   key: string;
@@ -13,6 +14,7 @@ interface Props {
   renderValue: (key: string, v: unknown) => React.ReactNode;
   onDelete: (recordId: number) => void;
   onClose: () => void;
+  platform: string;
 }
 
 export default function DataDetailModal({
@@ -21,15 +23,42 @@ export default function DataDetailModal({
   renderValue,
   onDelete,
   onClose,
+  platform,
 }: Props) {
+  const platformUrl = detailRow ? getPlatformUrl(platform, detailRow) : null;
+  const platformName = PLATFORM_LABELS[platform] || '平台';
+
   return (
     <Modal
-      title="数据详情"
+      title={
+        <Space>
+          <span>数据详情</span>
+          {platformUrl && (
+            <Button
+              type="primary"
+              size="small"
+              icon={<ExportOutlined />}
+              onClick={() => window.open(platformUrl, '_blank', 'noopener')}
+            >
+              在{platformName}打开
+            </Button>
+          )}
+        </Space>
+      }
       open={!!detailRow}
       onCancel={onClose}
       width={800}
       footer={
         <Space>
+          {platformUrl && (
+            <Button
+              type="primary"
+              icon={<ExportOutlined />}
+              onClick={() => window.open(platformUrl, '_blank', 'noopener')}
+            >
+              在{platformName}打开
+            </Button>
+          )}
           {detailRow && (
             <Button
               danger

@@ -281,6 +281,58 @@ class DataQueryService:
         return deleted_counts
 
     @staticmethod
+    async def get_available_tasks(platform: str, kind: str) -> list[dict]:
+        """获取当前平台+类型数据中涉及的所有任务列表（带关键词和记录数）"""
+        from database.system_models import CrawlerTask
+
+        meta = PLATFORM_META.get(platform)
+        if not meta:
+            raise ValueError(f"不支持的平台: {platform}")
+        kind_meta = meta["kinds"].get(kind)
+        if not kind_meta:
+            raise ValueError(f"不支持的数据类型: {kind}")
+
+        model = kind_meta["model"]
+        if not hasattr(model, "task_id"):
+            return []
+
+        async with get_mysql_session() as session:
+            # 查询当前数据中的 DISTINCT task_id + 记录数
+            stmt = (
+                select(model.task_id, func.count(model.id).label("record_count"))
+                .where(model.task_id.isnot(None))
+                .group_by(model.task_id)
+                .order_by(func.count(model.id).desc())
+            )
+            rows = (await session.execute(stmt)).all()
+
+            if not rows:
+                return []
+
+            task_ids = [row[0] for row in rows if row[0]]
+            count_map = {row[0]: row[1] for row in rows if row[0]}
+
+            # 批量查询 crawler_task 获取关键词和状态
+            task_stmt = select(CrawlerTask).where(CrawlerTask.id.in_(task_ids))
+            task_rows = (await session.execute(task_stmt)).scalars().all()
+            task_map = {t.id: t for t in task_rows}
+
+            result = []
+            for tid in task_ids:
+                task = task_map.get(tid)
+                payload = task.payload_snapshot if task else {}
+                keywords = payload.get("keywords", "") if isinstance(payload, dict) else ""
+                result.append({
+                    "task_id": tid,
+                    "keywords": keywords,
+                    "status": task.status if task else "unknown",
+                    "created_at": task.created_at.isoformat() if task and task.created_at else "",
+                    "record_count": count_map.get(tid, 0),
+                })
+
+            return result
+
+    @staticmethod
     async def get_task_data_stats(task_id: int) -> dict:
         """统计某任务在各平台产生的数据量"""
         platform_stats = {}

@@ -31,3 +31,32 @@ export const CONTENT_ID_FIELDS: Record<string, string> = {
   tieba: 'note_id',
   zhihu: 'content_id',
 };
+
+/** 知乎内容类型标签 */
+export const ZHIHU_CONTENT_TYPE_LABELS: Record<string, { label: string; color: string }> = {
+  answer: { label: '答案', color: 'blue' },
+  article: { label: '文章', color: 'green' },
+  zvideo: { label: '视频', color: 'orange' },
+};
+
+/** 各平台数据中存储原始链接的字段名（数据库已存完整URL） */
+export const PLATFORM_URL_FIELDS: Record<string, string[]> = {
+  xhs: ['note_url'],
+  dy: ['aweme_url'],
+  ks: ['video_url'],
+  bili: ['video_url'],
+  wb: ['note_url'],
+  tieba: ['note_url'],
+  zhihu: ['content_url'],
+};
+
+/** 从数据行中提取原始平台链接 */
+export function getPlatformUrl(platform: string, row: Record<string, unknown>): string | null {
+  const fields = PLATFORM_URL_FIELDS[platform];
+  if (!fields) return null;
+  for (const f of fields) {
+    const v = row[f];
+    if (v != null && typeof v === 'string' && v.startsWith('http')) return v;
+  }
+  return null;
+}

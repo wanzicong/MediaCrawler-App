@@ -11,10 +11,10 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { AppstoreOutlined, BarChartOutlined, CloudDownloadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, UnorderedListOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, BarChartOutlined, CloudDownloadOutlined, DeleteOutlined, ExportOutlined, EyeOutlined, ReadOutlined, SearchOutlined, UnorderedListOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 import {
   fetchDbData,
@@ -22,6 +22,7 @@ import {
   fetchTaskData,
   fetchContentComments,
   deleteDataRecord,
+  fetchAvailableTasks,
 } from '@/api';
 import { analyzeComments, type AnalyzeResponse } from '@/api/modules/ai';
 import { commentAsync } from '@/api/modules/comments';
@@ -33,6 +34,9 @@ import {
   IMAGE_FIELDS,
   CONTENT_ID_FIELDS,
   KIND_LABELS,
+  PLATFORM_LABELS,
+  ZHIHU_CONTENT_TYPE_LABELS,
+  getPlatformUrl,
 } from '@/constants';
 import { fetchEnabledPlatforms } from '@/api/modules/platforms';
 
@@ -46,6 +50,7 @@ import AnalysisResultCard from './AnalysisResultCard';
 export default function DataPage() {
   const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const urlTaskId = searchParams.get('task_id');
@@ -156,6 +161,14 @@ export default function DataPage() {
     enabled: !!platform,
   });
 
+  // 获取当前视图中有数据的任务列表（用于任务筛选下拉框）
+  const { data: availableTasks = [], isLoading: tasksLoading } = useQuery({
+    queryKey: ['available-tasks', platform, kind],
+    queryFn: () => fetchAvailableTasks(platform, kind),
+    staleTime: 30 * 1000,
+    enabled: !!platform,
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (recordId: number) => deleteDataRecord(platform, kind, recordId),
     onSuccess: () => {
@@ -258,6 +271,10 @@ export default function DataPage() {
             />
           );
         }
+        if (field === 'content_type') {
+          const typeInfo = ZHIHU_CONTENT_TYPE_LABELS[s] || { label: s, color: 'default' };
+          return <Tag color={typeInfo.color}>{typeInfo.label}</Tag>;
+        }
         return formatText(field, v);
       },
     }));
@@ -265,14 +282,29 @@ export default function DataPage() {
     const actionCol = {
       title: '操作',
       key: 'action',
-      width: 180,
+      width: 240,
       fixed: 'right' as const,
       render: (_: unknown, r: Record<string, unknown>) => {
         const recordId = r.id as number;
         const cid = r[contentIdField] as string | undefined;
+        const platformUrl = getPlatformUrl(platform, r);
+        const platformName = PLATFORM_LABELS[platform] || '平台';
 
         return (
-          <Space size="small">
+          <Space size="small" wrap>
+            {platformUrl && (
+              <Button
+                type="link"
+                size="small"
+                icon={<ExportOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(platformUrl, '_blank', 'noopener');
+                }}
+              >
+                {platformName}
+              </Button>
+            )}
             {kind === 'contents' && cid && (
               <>
                 <Button
@@ -312,6 +344,19 @@ export default function DataPage() {
                   爬取评论
                 </Button>
               </>
+            )}
+            {platform === 'zhihu' && kind === 'contents' && cid && (
+              <Button
+                type="link"
+                size="small"
+                icon={<ReadOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/zhihu/${cid}`);
+                }}
+              >
+                查看全文
+              </Button>
             )}
             <Button
               type="link"
@@ -391,6 +436,14 @@ export default function DataPage() {
     setPage(1);
   }, []);
 
+  const handleTaskIdChange = useCallback((v: string | null) => {
+    setFilterTaskId(v);
+    setFilterContentId(null);
+    setSearchKeyword('');
+    setKeyword('');
+    setPage(1);
+  }, []);
+
   const handleClearFilters = useCallback(() => {
     setFilterTaskId(null);
     setFilterContentId(null);
@@ -428,10 +481,13 @@ export default function DataPage() {
           kinds={kinds}
           keyword={keyword}
           dataTotal={data?.total}
-          hasFilters={!!(filterTaskId || filterContentId)}
+          hasFilters={!!(filterTaskId || filterContentId || searchKeyword)}
           sortOptions={videoSortOptions}
           orderBy={orderBy}
           orderDirection={orderDirection}
+          filterTaskId={filterTaskId}
+          availableTasks={availableTasks}
+          tasksLoading={tasksLoading}
           onPlatformChange={handlePlatformChange}
           onKindChange={handleKindChange}
           onKeywordChange={setKeyword}
@@ -439,6 +495,7 @@ export default function DataPage() {
           onClearFilters={handleClearFilters}
           onOrderByChange={setOrderBy}
           onOrderDirectionChange={setOrderDirection}
+          onTaskIdChange={handleTaskIdChange}
         />
 
         <DataFilterAlerts
@@ -513,6 +570,7 @@ export default function DataPage() {
           renderValue={renderDetailValue}
           onDelete={handleDeleteDetail}
           onClose={() => setDetailRow(null)}
+          platform={platform}
         />
 
         <Modal

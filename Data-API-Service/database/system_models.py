@@ -68,11 +68,12 @@ class ChatMemory(Base):
 
 
 class KeywordGroup(Base):
-    """关键词分组"""
+    """关键词分组（支持两级：parent_id 为 NULL 是一级分组，有值则是二级子分组）"""
 
     __tablename__ = "keyword_group"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    parent_id = Column(Integer, nullable=True, index=True, comment="父分组 ID（NULL=一级分组）")
     name = Column(String(64), nullable=False, unique=True, comment="分组名称")
     description = Column(String(256), default="", comment="分组说明")
     color = Column(String(16), default="#6366f1", comment="分组颜色")

@@ -11,6 +11,7 @@ import {
   Radio,
   Row,
   Select,
+  Space,
   Switch,
   Typography,
 } from 'antd';
@@ -28,7 +29,8 @@ interface Props {
   isRunning: boolean;
   isPending: boolean;
   applyProfile: (id: number) => void;
-  onFinish: (values: CrawlerStartPayload & { profile_id?: number }) => void;
+  onSave: (values: CrawlerStartPayload & { profile_id?: number }) => void;
+  onSaveAndRun: (values: CrawlerStartPayload & { profile_id?: number }) => void;
 }
 
 export default function CrawlerLaunchForm({
@@ -39,7 +41,8 @@ export default function CrawlerLaunchForm({
   isRunning,
   isPending,
   applyProfile,
-  onFinish,
+  onSave,
+  onSaveAndRun,
 }: Props) {
   const { modal } = App.useApp();
   const crawlerType = Form.useWatch('crawler_type', form);
@@ -89,7 +92,6 @@ export default function CrawlerLaunchForm({
       <Form
         form={form}
         layout="vertical"
-        onFinish={onFinish}
         onValuesChange={() => {
           dirtyRef.current = true;
         }}
@@ -227,15 +229,29 @@ export default function CrawlerLaunchForm({
         </Form.Item>
 
         <Form.Item>
-          <Button
-            type="primary"
-            htmlType="submit"
-            icon={<PlayCircleOutlined />}
-            loading={isPending}
-            disabled={isRunning}
-          >
-            启动爬虫
-          </Button>
+          <Space>
+            <Button
+              icon={<PlayCircleOutlined />}
+              loading={isPending}
+              disabled={isRunning}
+              onClick={() => {
+                form.validateFields().then((values) => onSave(values)).catch(() => {});
+              }}
+            >
+              保存任务
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlayCircleOutlined />}
+              loading={isPending}
+              disabled={isRunning}
+              onClick={() => {
+                form.validateFields().then((values) => onSaveAndRun(values)).catch(() => {});
+              }}
+            >
+              保存并立即执行
+            </Button>
+          </Space>
         </Form.Item>
       </Form>
   );

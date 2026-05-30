@@ -5,11 +5,13 @@ import request from '../request';
 
 export interface KeywordGroup {
   id: number;
+  parent_id: number | null;
   name: string;
   description: string;
   color: string;
   sort_order: number;
   keyword_count?: number;
+  children: KeywordGroup[];
   created_at: string;
   updated_at: string;
 }
@@ -43,6 +45,7 @@ export interface FissionResult {
 
 export interface KeywordStats {
   total_keywords: number;
+  ungrouped_count: number;
   by_group: Array<{ group_name: string; count: number }>;
   by_status: Array<{ status: string; count: number }>;
   top_performing: Array<{ keyword: string; results_count: number; crawled_count: number }>;
@@ -158,6 +161,22 @@ export function autoClassifyKeyword(keywordId: number) {
 
 export function batchAutoClassify(keywordIds: number[]) {
   return httpPost<AutoClassifyBatchResult>('/api/keywords/auto-classify/batch', { keyword_ids: keywordIds });
+}
+
+// ── Reclassify API ──────────────────────────────────────────────────────
+
+export interface ReclassifyAllResult {
+  processed: number;
+  groups_created: number;
+  keywords_reassigned: number;
+}
+
+export function reclassifyAllKeywords() {
+  return httpPost<ReclassifyAllResult>(
+    '/api/keywords/reclassify-all',
+    { batch_size: 100 },
+    { timeout: 300_000 },
+  );
 }
 
 // ── Stats APIs ─────────────────────────────────────────────────────────

@@ -11,6 +11,9 @@ export {
   CRAWLER_TYPE_LABELS,
   KIND_LABELS,
   CONTENT_ID_FIELDS,
+  ZHIHU_CONTENT_TYPE_LABELS,
+  PLATFORM_URL_FIELDS,
+  getPlatformUrl,
 } from './platforms';
 
 export {

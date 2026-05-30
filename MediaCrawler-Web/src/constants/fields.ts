@@ -4,7 +4,7 @@ export const IMPORTANT_FIELDS: Record<string, string[]> = {
   'xhs.contents': ['avatar', 'nickname', 'title', 'image_list'],
   'wb.contents': ['avatar', 'nickname', 'content'],
   'tieba.contents': ['user_avatar', 'user_nickname', 'title'],
-  'zhihu.contents': ['user_avatar', 'user_nickname', 'title'],
+  'zhihu.contents': ['user_avatar', 'user_nickname', 'title', 'content_type', 'content_text'],
 
   // 视频列表：头像、昵称、标题、视频封面
   'dy.contents': ['avatar', 'nickname', 'title', 'cover_url'],
@@ -50,6 +50,7 @@ export const FIELD_LABELS: Record<string, string> = {
   column_count: '专栏', get_voteup_count: '获赞', user_url_token: 'URLToken', url_token: 'URLToken',
   registration_duration: '注册时长', is_official: '是否认证', user_rank: '用户等级', total_fans: '总粉丝',
   question_id: '问题ID',
+  content_html: 'HTML原文',
 };
 
 /** 时间戳字段 */

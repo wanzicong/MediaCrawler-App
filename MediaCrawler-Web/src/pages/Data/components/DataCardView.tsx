@@ -1,6 +1,7 @@
+import { useNavigate } from 'react-router-dom';
 import { Button, Card, Col, Empty, Image, Pagination, Row, Skeleton, Typography, Result, Space, Tag } from 'antd';
-import { CloudDownloadOutlined, EyeOutlined, LikeOutlined, PlayCircleOutlined, CommentOutlined } from '@ant-design/icons';
-import { CONTENT_ID_FIELDS } from '@/constants';
+import { CloudDownloadOutlined, ExportOutlined, EyeOutlined, LikeOutlined, PlayCircleOutlined, CommentOutlined, ReadOutlined } from '@ant-design/icons';
+import { CONTENT_ID_FIELDS, getPlatformUrl, PLATFORM_LABELS, ZHIHU_CONTENT_TYPE_LABELS } from '@/constants';
 import { normalizeImageUrl, isImageUrl } from '@/utils/format';
 import { FIELD_LABELS, IMAGE_FIELDS } from '@/constants';
 
@@ -50,6 +51,7 @@ function getStatValue(row: Record<string, unknown>, fields: string[]): string | 
 export default function DataCardView({
   dataSource, isLoading, isError, error, platform, kind, page, pageSize, total, onPageChange, onPageSizeChange, onCardClick, onViewComments, onCrawlComments, crawlPending,
 }: Props) {
+  const navigate = useNavigate();
   if (isLoading) {
     return (
       <Row gutter={[16, 16]}>
@@ -110,6 +112,16 @@ export default function DataCardView({
                   {title}
                 </Typography.Paragraph>
 
+                {platform === 'zhihu' && row.content_type && (
+                  <div style={{ marginBottom: 6 }}>
+                    {(() => {
+                      const ct = String(row.content_type);
+                      const typeInfo = ZHIHU_CONTENT_TYPE_LABELS[ct] || { label: ct, color: 'default' };
+                      return <Tag color={typeInfo.color} style={{ fontSize: 11 }}>{typeInfo.label}</Tag>;
+                    })()}
+                  </div>
+                )}
+
                 <Space style={{ marginBottom: 4 }}>
                   {avatarUrl && isImageUrl(avatarUrl) && (
                     <Image
@@ -139,35 +151,68 @@ export default function DataCardView({
                   })}
                 </div>
 
-                {kind === 'contents' && cid && (
-                  <div style={{ marginTop: 8, textAlign: 'right' }}>
-                    <Button
-                      type="link"
-                      size="small"
-                      icon={<EyeOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onViewComments(cid);
-                      }}
-                    >
-                      查看评论
-                    </Button>
-                    {onCrawlComments && (
+                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                  <Space size={2}>
+                    {kind === 'contents' && cid && (
+                      <>
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<EyeOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onViewComments(cid);
+                          }}
+                        >
+                          评论
+                        </Button>
+                        {platform === 'zhihu' && (
+                          <Button
+                            type="link"
+                            size="small"
+                            icon={<ReadOutlined />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/zhihu/${cid}`);
+                            }}
+                          >
+                            全文
+                          </Button>
+                        )}
+                        {onCrawlComments && (
+                          <Button
+                            type="link"
+                            size="small"
+                            icon={<CloudDownloadOutlined />}
+                            loading={crawlPending}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onCrawlComments(cid);
+                            }}
+                          >
+                            爬取
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </Space>
+                  {(() => {
+                    const url = getPlatformUrl(platform, row);
+                    return url ? (
                       <Button
                         type="link"
                         size="small"
-                        icon={<CloudDownloadOutlined />}
-                        loading={crawlPending}
+                        icon={<ExportOutlined />}
                         onClick={(e) => {
                           e.stopPropagation();
-                          onCrawlComments(cid);
+                          window.open(url, '_blank', 'noopener');
                         }}
                       >
-                        爬取评论
+                        {PLATFORM_LABELS[platform] || '平台'}
                       </Button>
-                    )}
-                  </div>
-                )}
+                    ) : null;
+                  })()}
+                </div>
               </Card>
             </Col>
           );

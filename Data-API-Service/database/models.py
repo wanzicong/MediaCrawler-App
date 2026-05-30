@@ -71,6 +71,7 @@ class BilibiliVideoComment(Base):
 class BilibiliUpInfo(Base):
     __tablename__ = 'bilibili_up_info'
     id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     user_id = Column(BigInteger, index=True, comment='用户ID')
     nickname = Column(Text, comment='用户昵称')
     sex = Column(Text, comment='性别')
@@ -401,7 +402,8 @@ class ZhihuContent(Base):
     task_id = Column(BigInteger, nullable=True, index=True, comment='关联爬取任务ID')
     content_id = Column(String(64), index=True, unique=True, comment='内容ID')
     content_type = Column(Text, comment='内容类型')
-    content_text = Column(Text, comment='内容文本')
+    content_text = Column(Text, comment='内容文本（纯文本）')
+    content_html = Column(Text, comment='内容HTML原文（保留格式）')
     content_url = Column(Text, comment='内容URL')
     question_id = Column(String(255), comment='问题ID')
     title = Column(Text, comment='标题')

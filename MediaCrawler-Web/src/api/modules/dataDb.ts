@@ -52,3 +52,15 @@ export function deleteDataRecord(platform: string, kind: string, recordId: numbe
 export function fetchTaskDataStats(taskId: number) {
   return httpGet<TaskDataStats>(`/api/data/db/task/${taskId}/stats`);
 }
+
+export interface TaskInfo {
+  task_id: number;
+  keywords: string;
+  status: string;
+  created_at: string;
+  record_count: number;
+}
+
+export function fetchAvailableTasks(platform: string, kind: string) {
+  return httpGet<TaskInfo[]>(`/api/data/db/${platform}/${kind}/tasks`);
+}

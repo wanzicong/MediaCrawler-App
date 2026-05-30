@@ -2,8 +2,8 @@ import { httpDelete, httpGet, httpPost } from '../request';
 import type { ApiResponse, CrawlerStartPayload, CrawlerStatusResponse } from '@/types/api';
 import type { CrawlerTask, TaskListResponse, TaskRerunResponse } from '@/types/config';
 
-export function startCrawler(payload: CrawlerStartPayload) {
-  return httpPost<ApiResponse & { task_id?: number }>('/api/crawler/start', {
+export function startCrawler(payload: CrawlerStartPayload & { execute_now?: boolean }) {
+  return httpPost<ApiResponse & { task_id?: number; created?: boolean }>('/api/crawler/start', {
     ...payload,
     save_option: 'db',
   });
@@ -13,17 +13,23 @@ export function fetchCrawlerTasks(params: {
   page?: number;
   page_size?: number;
   status?: string;
+  platform?: string;
 } = {}) {
   const q = new URLSearchParams();
   if (params.page) q.set('page', String(params.page));
   if (params.page_size) q.set('page_size', String(params.page_size));
   if (params.status) q.set('status', params.status);
+  if (params.platform) q.set('platform', params.platform);
   const qs = q.toString();
   return httpGet<TaskListResponse>(`/api/crawler/tasks${qs ? `?${qs}` : ''}`);
 }
 
 export function fetchCrawlerTaskDetail(taskId: number) {
   return httpGet<CrawlerTask>(`/api/crawler/tasks/${taskId}`);
+}
+
+export function executeCrawlerTask(taskId: number) {
+  return httpPost<{ status: string; task_id: number }>(`/api/crawler/tasks/${taskId}/execute`);
 }
 
 export function rerunCrawlerTask(taskId: number) {

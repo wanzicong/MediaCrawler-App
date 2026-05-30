@@ -36,6 +36,18 @@ async def query_data_by_task(
         raise HTTPException(400, str(e))
 
 
+@router.get("/{platform}/{kind}/tasks")
+async def get_available_tasks(
+    platform: str,
+    kind: str,
+):
+    """获取当前平台+类型数据中涉及的所有任务列表（用于筛选下拉框）"""
+    try:
+        return await DataQueryService.get_available_tasks(platform, kind)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.get("/{platform}/{kind}/content/{content_id}")
 async def query_comments_by_content(
     platform: str,

@@ -119,9 +119,10 @@ async def list_tasks(
     page: int = 1,
     page_size: int = 20,
     status: Optional[str] = None,
+    platform: Optional[str] = None,
 ):
     """分页查询任务列表"""
-    return await ConfigService.list_tasks_paginated(page=page, page_size=page_size, status=status)
+    return await ConfigService.list_tasks_paginated(page=page, page_size=page_size, status=status, platform=platform)
 
 
 @router.delete("/tasks/{task_id}")

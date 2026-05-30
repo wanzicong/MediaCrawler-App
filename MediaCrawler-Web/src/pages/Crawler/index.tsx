@@ -21,6 +21,7 @@ import {
   stopCrawler,
   fetchCrawlerTasks,
   rerunCrawlerTask,
+  executeCrawlerTask,
   deleteCrawlerTask,
   fetchTaskDataStats,
 } from '@/api';
@@ -46,6 +47,7 @@ export default function CrawlerPage() {
   const [activeTab, setActiveTab] = useState('launch');
   const [historyPage, setHistoryPage] = useState(1);
   const [historyStatus, setHistoryStatus] = useState<string | undefined>(undefined);
+  const [historyPlatform, setHistoryPlatform] = useState<string | undefined>(undefined);
   const [detailTask, setDetailTask] = useState<CrawlerTask | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
@@ -71,9 +73,9 @@ export default function CrawlerPage() {
   const { logs, connected, clearLogs, refreshLogs } = useCrawlerLogs(isRunning);
 
   const { data: taskData, isLoading: tasksLoading, isFetching: tasksFetching } = useQuery({
-    queryKey: ['crawler-tasks', historyPage, historyStatus],
+    queryKey: ['crawler-tasks', historyPage, historyStatus, historyPlatform],
     queryFn: () =>
-      fetchCrawlerTasks({ page: historyPage, page_size: 20, status: historyStatus }),
+      fetchCrawlerTasks({ page: historyPage, page_size: 20, status: historyStatus, platform: historyPlatform }),
     placeholderData: keepPreviousData,
     refetchInterval: activeTab === 'history' ? 10000 : false,
   });
@@ -81,7 +83,21 @@ export default function CrawlerPage() {
   const startMutation = useMutation({
     mutationFn: startCrawler,
     onSuccess: (res) => {
-      message.success(res.task_id ? `任务 #${res.task_id} 已启动` : '爬虫任务已启动');
+      if (res.created) {
+        message.success(`任务 #${res.task_id} 已保存（待执行）`);
+      } else {
+        message.success(res.task_id ? `任务 #${res.task_id} 已启动` : '爬虫任务已启动');
+      }
+      setActiveTab('history');
+      void queryClient.invalidateQueries({ queryKey: ['crawler', 'status'] });
+      void queryClient.invalidateQueries({ queryKey: ['crawler-tasks'] });
+    },
+  });
+
+  const executeMutation = useMutation({
+    mutationFn: (taskId: number) => executeCrawlerTask(taskId),
+    onSuccess: (res) => {
+      message.success(`任务 #${res.task_id} 已开始执行`);
       setActiveTab('history');
       void queryClient.invalidateQueries({ queryKey: ['crawler', 'status'] });
       void queryClient.invalidateQueries({ queryKey: ['crawler-tasks'] });
@@ -176,9 +192,15 @@ export default function CrawlerPage() {
     });
   };
 
-  const onFinish = (values: CrawlerStartPayload & { profile_id?: number }) => {
-    startMutation.mutate(values);
+  const handleSave = (values: CrawlerStartPayload & { profile_id?: number }) => {
+    startMutation.mutate({ ...values, execute_now: false });
   };
+
+  const handleSaveAndRun = (values: CrawlerStartPayload & { profile_id?: number }) => {
+    startMutation.mutate({ ...values, execute_now: true });
+  };
+
+  const handleExecute = useCallback((id: number) => executeMutation.mutate(id), [executeMutation.mutate]);
 
   const handleRowClick = useCallback((task: CrawlerTask) => {
     setDetailTask(task);
@@ -270,7 +292,8 @@ export default function CrawlerPage() {
                 isRunning={isRunning}
                 isPending={startMutation.isPending}
                 applyProfile={applyProfile}
-                onFinish={onFinish}
+                onSave={handleSave}
+                onSaveAndRun={handleSaveAndRun}
               />
             ),
           },
@@ -283,15 +306,19 @@ export default function CrawlerPage() {
                 loading={tasksLoading}
                 fetching={tasksFetching}
                 statusFilter={historyStatus}
+                platformFilter={historyPlatform}
                 page={taskData?.page ?? historyPage}
                 total={taskData?.total ?? 0}
                 pageSize={taskData?.page_size ?? 20}
                 rerunPending={rerunMutation.isPending}
+                executePending={executeMutation.isPending}
                 onStatusChange={setHistoryStatus}
+                onPlatformChange={setHistoryPlatform}
                 onPageChange={setHistoryPage}
                 onRowClick={handleRowClick}
                 onRerun={handleRerun}
                 onDelete={handleDelete}
+                onExecute={handleExecute}
                 onRefresh={handleRefresh}
                 onStop={() => stopMutation.mutate()}
                 stopPending={stopMutation.isPending}

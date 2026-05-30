@@ -5,7 +5,7 @@ import {
   Table,
   Tag,
 } from 'antd';
-import { ReloadOutlined, DeleteOutlined, StopOutlined } from '@ant-design/icons';
+import { ReloadOutlined, DeleteOutlined, StopOutlined, CaretRightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useQuery } from '@tanstack/react-query';
 
@@ -23,15 +23,19 @@ interface Props {
   loading: boolean;
   fetching: boolean;
   statusFilter: string | undefined;
+  platformFilter: string | undefined;
   page: number;
   total: number;
   pageSize: number;
   rerunPending: boolean;
+  executePending: boolean;
   onStatusChange: (v: string | undefined) => void;
+  onPlatformChange: (v: string | undefined) => void;
   onPageChange: (p: number) => void;
   onRowClick: (task: CrawlerTask) => void;
   onRerun: (taskId: number) => void;
   onDelete: (taskId: number) => void;
+  onExecute: (taskId: number) => void;
   onRefresh: () => void;
   onStop?: () => void;
   stopPending?: boolean;
@@ -42,15 +46,19 @@ export default function CrawlerTaskTable({
   loading,
   fetching,
   statusFilter,
+  platformFilter,
   page,
   total,
   pageSize,
   rerunPending,
+  executePending,
   onStatusChange,
+  onPlatformChange,
   onPageChange,
   onRowClick,
   onRerun,
   onDelete,
+  onExecute,
   onRefresh,
   onStop,
   stopPending,
@@ -143,6 +151,20 @@ export default function CrawlerTaskTable({
               停止
             </Button>
           )}
+          {(r.status === 'pending' || r.status === 'cancelled') && (
+            <Button
+              type="link"
+              size="small"
+              icon={<CaretRightOutlined />}
+              loading={executePending}
+              onClick={(e) => {
+                e.stopPropagation();
+                onExecute(r.id);
+              }}
+            >
+              执行
+            </Button>
+          )}
           {r.status === 'failed' && (
             <Button
               type="link"
@@ -175,11 +197,22 @@ export default function CrawlerTaskTable({
 
   return (
     <>
-      <Space style={{ marginBottom: 16 }}>
+      <Space style={{ marginBottom: 16 }} wrap>
+        <Select
+          allowClear
+          placeholder="平台筛选"
+          style={{ minWidth: 120 }}
+          value={platformFilter}
+          onChange={(val) => {
+            onPlatformChange(val);
+            onPageChange(1);
+          }}
+          options={(platforms ?? []).map((p) => ({ value: p.code, label: p.name }))}
+        />
         <Select
           allowClear
           placeholder="状态过滤"
-          style={{ minWidth: 140 }}
+          style={{ minWidth: 120 }}
           value={statusFilter}
           onChange={(val) => {
             onStatusChange(val);

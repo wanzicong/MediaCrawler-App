@@ -2,6 +2,7 @@
 """关键词管理与 AI 裂变路由"""
 import json
 import os
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -38,6 +39,7 @@ def _format_dt(dt) -> str:
 
 class GroupCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
+    parent_id: Optional[int] = None
     description: Optional[str] = ""
     color: Optional[str] = "#6366f1"
     sort_order: Optional[int] = 0
@@ -45,6 +47,7 @@ class GroupCreate(BaseModel):
 
 class GroupUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=64)
+    parent_id: Optional[int] = None
     description: Optional[str] = None
     color: Optional[str] = None
     sort_order: Optional[int] = None
@@ -52,11 +55,13 @@ class GroupUpdate(BaseModel):
 
 class GroupOut(BaseModel):
     id: int
+    parent_id: Optional[int] = None
     name: str
     description: str
     color: str
     sort_order: int
     keyword_count: int = 0
+    children: list["GroupOut"] = []
     created_at: str
     updated_at: str
 
@@ -149,6 +154,7 @@ class TopPerforming(BaseModel):
 
 class StatsResponse(BaseModel):
     total_keywords: int
+    ungrouped_count: int = 0
     by_group: list[StatsByGroup]
     by_status: list[StatsByStatus]
     top_performing: list[TopPerforming]
@@ -204,6 +210,32 @@ class AutoClassifyBatchResponse(BaseModel):
     results: list[AutoClassifyResponse]
 
 
+# ── 全量重分类模型 ────────────────────────────────────────────────────
+
+class ReclassifyRequest(BaseModel):
+    """全量重分类请求"""
+    batch_size: int = Field(100, ge=20, le=200, description="每批处理的关键词数量")
+
+
+class ReclassifyItem(BaseModel):
+    """单个关键词重分类结果"""
+    keyword_id: int
+    keyword: str
+    old_group_name: str = ""
+    new_group_name: str
+    group_id: int
+    group_created: bool = False
+
+
+class ReclassifyAllResponse(BaseModel):
+    """全量重分类响应"""
+    processed: int = 0
+    groups_created: int = 0
+    keywords_reassigned: int = 0
+    details: list[ReclassifyItem] = []
+    errors: list[str] = []
+
+
 # ── Keyword Group Endpoints ─────────────────────────────────────────
 
 @router.post("/groups", response_model=GroupOut)
@@ -216,23 +248,32 @@ async def create_group(body: GroupCreate):
         if existing.scalar_one_or_none():
             raise HTTPException(400, f"分组名称 '{body.name}' 已存在")
 
+        if body.parent_id is not None:
+            parent = await session.get(KeywordGroup, body.parent_id)
+            if not parent:
+                raise HTTPException(404, "父分组不存在")
+            if parent.parent_id is not None:
+                raise HTTPException(400, "仅支持两级分组，不能三级嵌套")
+
         group = KeywordGroup(
+            parent_id=body.parent_id,
             name=body.name,
             description=body.description or "",
             color=body.color or "#6366f1",
             sort_order=body.sort_order or 0,
         )
         session.add(group)
-        await session.flush()
         await session.commit()
 
         return GroupOut(
             id=group.id,
+            parent_id=group.parent_id,
             name=group.name,
-            description=group.description,
-            color=group.color,
-            sort_order=group.sort_order,
+            description=group.description or "",
+            color=group.color or "#6366f1",
+            sort_order=group.sort_order or 0,
             keyword_count=0,
+            children=[],
             created_at=_format_dt(group.created_at),
             updated_at=_format_dt(group.updated_at),
         )
@@ -241,13 +282,13 @@ async def create_group(body: GroupCreate):
 @router.get("/groups", response_model=list[GroupOut])
 async def list_groups():
     async with get_mysql_session() as session:
-        # Get all groups
+        # Get all groups ordered
         result = await session.execute(
             select(KeywordGroup).order_by(KeywordGroup.sort_order, KeywordGroup.id)
         )
         groups = result.scalars().all()
 
-        # Get keyword counts per group
+        # Get keyword counts per group (including from sub-groups)
         count_result = await session.execute(
             select(Keyword.group_id, func.count(Keyword.id))
             .where(Keyword.group_id.isnot(None))
@@ -255,19 +296,34 @@ async def list_groups():
         )
         count_map = {row[0]: row[1] for row in count_result.all()}
 
-        return [
-            GroupOut(
+        def _count_recursive(g: KeywordGroup) -> int:
+            """Count keywords in this group + all descendant sub-groups."""
+            total = count_map.get(g.id, 0)
+            for child in groups:
+                if child.parent_id == g.id:
+                    total += _count_recursive(child)
+            return total
+
+        def _build_out(g: KeywordGroup) -> GroupOut:
+            children = []
+            for child in groups:
+                if child.parent_id == g.id:
+                    children.append(_build_out(child))
+            return GroupOut(
                 id=g.id,
+                parent_id=g.parent_id,
                 name=g.name,
                 description=g.description or "",
                 color=g.color or "#6366f1",
                 sort_order=g.sort_order or 0,
-                keyword_count=count_map.get(g.id, 0),
+                keyword_count=_count_recursive(g),
+                children=children,
                 created_at=_format_dt(g.created_at),
                 updated_at=_format_dt(g.updated_at),
             )
-            for g in groups
-        ]
+
+        # Only return root-level groups (parent_id is NULL)
+        return [_build_out(g) for g in groups if g.parent_id is None]
 
 
 @router.put("/groups/{group_id}", response_model=GroupOut)
@@ -287,6 +343,15 @@ async def update_group(group_id: int, body: GroupUpdate):
             if existing.scalar_one_or_none():
                 raise HTTPException(400, f"分组名称 '{body.name}' 已存在")
             group.name = body.name
+        if body.parent_id is not None:
+            if body.parent_id == group_id:
+                raise HTTPException(400, "不能将自己设为父分组")
+            parent = await session.get(KeywordGroup, body.parent_id)
+            if not parent:
+                raise HTTPException(404, "父分组不存在")
+            if parent.parent_id is not None:
+                raise HTTPException(400, "仅支持两级分组，不能三级嵌套")
+            group.parent_id = body.parent_id
         if body.description is not None:
             group.description = body.description
         if body.color is not None:
@@ -305,11 +370,13 @@ async def update_group(group_id: int, body: GroupUpdate):
 
         return GroupOut(
             id=group.id,
+            parent_id=group.parent_id,
             name=group.name,
             description=group.description or "",
             color=group.color or "#6366f1",
             sort_order=group.sort_order or 0,
             keyword_count=kw_count,
+            children=[],
             created_at=_format_dt(group.created_at),
             updated_at=_format_dt(group.updated_at),
         )
@@ -322,13 +389,27 @@ async def delete_group(group_id: int):
         if not group:
             raise HTTPException(404, "分组不存在")
 
-        # Cascade delete all keywords in this group
+        # Collect all group IDs to delete (self + children)
+        all_groups = (await session.execute(select(KeywordGroup))).scalars().all()
+        ids_to_delete = {group_id}
+
+        def _collect_children(pid: int):
+            for g in all_groups:
+                if g.parent_id == pid:
+                    ids_to_delete.add(g.id)
+                    _collect_children(g.id)
+
+        _collect_children(group_id)
+
+        # Cascade delete all keywords in all affected groups
         await session.execute(
-            delete(Keyword).where(Keyword.group_id == group_id)
+            delete(Keyword).where(Keyword.group_id.in_(ids_to_delete))
         )
-        await session.delete(group)
+        await session.execute(
+            delete(KeywordGroup).where(KeywordGroup.id.in_(ids_to_delete))
+        )
         await session.commit()
-        return {"status": "ok", "deleted_group_id": group_id}
+        return {"status": "ok", "deleted_group_id": group_id, "cascade_deleted": sorted(ids_to_delete)}
 
 
 # ── Keyword Endpoints ───────────────────────────────────────────────
@@ -587,9 +668,158 @@ async def batch_auto_classify(body: AutoClassifyBatchRequest):
     )
 
 
+@router.post("/reclassify-all", response_model=ReclassifyAllResponse)
+async def reclassify_all(body: ReclassifyRequest = ReclassifyRequest()):
+    """全量重分类: 对所有关键词（含已分组）重新进行 AI 分类，可能创建新分组"""
+    api_key = _get_api_key()
+    if not api_key:
+        raise HTTPException(500, "未配置 DEEPSEEK_API_KEY")
+
+    # 1. 读取所有关键词和分组
+    async with get_mysql_session() as session:
+        all_kws = (await session.execute(
+            select(Keyword).order_by(Keyword.id)
+        )).scalars().all()
+        all_groups = (await session.execute(
+            select(KeywordGroup).order_by(KeywordGroup.sort_order, KeywordGroup.id)
+        )).scalars().all()
+
+    if not all_kws:
+        return ReclassifyAllResponse()
+
+    # 构建查找映射
+    group_name_to_id = {g.name: g.id for g in all_groups}
+    group_id_to_name = {g.id: g.name for g in all_groups}
+    groups_info = [
+        {
+            "id": g.id, "name": g.name, "description": g.description or "",
+            "parent_id": g.parent_id,
+            "parent_name": group_id_to_name.get(g.parent_id, "") if g.parent_id else "",
+        }
+        for g in all_groups
+    ]
+    kw_id_to_old_group = {
+        kw.id: group_id_to_name.get(kw.group_id, "") if kw.group_id else ""
+        for kw in all_kws
+    }
+
+    # 2. 分批调用 DeepSeek（每批最多 batch_size 个关键词）
+    batches = [all_kws[i:i + body.batch_size] for i in range(0, len(all_kws), body.batch_size)]
+    all_plans: list[dict] = []
+    errors: list[str] = []
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        for batch_idx, batch_kws in enumerate(batches):
+            kw_data = [{"id": kw.id, "keyword": kw.keyword, "platform": kw.platform} for kw in batch_kws]
+            prompt = _build_reclassify_prompt(kw_data, groups_info)
+
+            try:
+                ai_resp = await client.post(
+                    "https://api.deepseek.com/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "deepseek-chat",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": 16384,
+                    },
+                )
+                ai_resp.raise_for_status()
+                ai_text = ai_resp.json()["choices"][0]["message"]["content"]
+                batch_plan = _parse_reclassify_batch_response(ai_text, kw_data, batch_idx)
+                all_plans.extend(batch_plan)
+            except Exception as e:
+                errors.append(f"第 {batch_idx + 1} 批失败: {str(e)[:200]}")
+
+    if not all_plans and errors:
+        raise HTTPException(500, "; ".join(errors[:5]))
+
+    # 3. 收集所有需要的新分组 + 父分组关系
+    plan_new_groups: dict[str, str | None] = {}  # name → parent_name
+    all_child_to_parent: dict[str, str] = {}  # child_group_name → parent_group_name
+    for plan in all_plans:
+        gn = plan["suggested_group"]
+        pn = plan.get("parent_group")
+        if plan.get("is_new_group") and gn not in group_name_to_id and gn not in plan_new_groups:
+            plan_new_groups[gn] = pn
+            if pn:
+                all_child_to_parent[gn] = pn
+        elif pn and gn in group_name_to_id:
+            # 已有分组也可能需要设置 parent_id
+            all_child_to_parent[gn] = pn
+
+    # 为 parent_group 中不存在的父分组也创建
+    extra_parents: dict[str, str | None] = {}
+    for pn in set(all_child_to_parent.values()):
+        if pn and pn not in group_name_to_id and pn not in plan_new_groups and pn not in extra_parents:
+            extra_parents[pn] = None  # 父分组的父分组为 None（顶层）
+    plan_new_groups.update(extra_parents)
+
+    # 4. 单事务写入
+    details: list[ReclassifyItem] = []
+    groups_created = 0
+    keywords_reassigned = 0
+
+    async with get_mysql_session() as session:
+        new_group_map: dict[str, int] = {}
+        # Pass 1: 创建所有新分组
+        for gn in plan_new_groups:
+            g = KeywordGroup(name=gn, description="AI 全量重分类自动创建")
+            session.add(g)
+            await session.flush()
+            new_group_map[gn] = g.id
+            groups_created += 1
+
+        full_group_map = {**group_name_to_id, **new_group_map}
+
+        # Pass 2: 设置所有分组的 parent_id（新分组 + 已有分组）
+        for child_name, parent_name in all_child_to_parent.items():
+            pid = full_group_map.get(parent_name)
+            if pid:
+                gid = full_group_map.get(child_name)
+                if gid:
+                    g = await session.get(KeywordGroup, gid)
+                    if g and g.parent_id != pid:
+                        g.parent_id = pid
+
+        # 更新关键词
+        for plan in all_plans:
+            target_gid = full_group_map.get(plan["suggested_group"])
+            kw_id = plan.get("keyword_id")
+            if not target_gid or not kw_id:
+                continue
+            kw = await session.get(Keyword, kw_id)
+            if kw:
+                old_name = kw_id_to_old_group.get(kw_id, "")
+                if kw.group_id != target_gid:
+                    kw.group_id = target_gid
+                    kw.updated_at = datetime.utcnow()
+                    keywords_reassigned += 1
+                details.append(ReclassifyItem(
+                    keyword_id=kw_id,
+                    keyword=kw.keyword,
+                    old_group_name=old_name,
+                    new_group_name=plan["suggested_group"],
+                    group_id=target_gid,
+                    group_created=plan.get("is_new_group", False),
+                ))
+
+        await session.commit()
+
+    return ReclassifyAllResponse(
+        processed=len(all_kws),
+        groups_created=groups_created,
+        keywords_reassigned=keywords_reassigned,
+        details=details[:100],
+        errors=errors,
+    )
+
+
 @router.get("", response_model=KeywordListOut)
 async def list_keywords(
-    group_id: Optional[int] = Query(None),
+    group_id: Optional[int] = Query(None, description="-1 = 未分类（group_id IS NULL）"),
     platform: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     keyword: Optional[str] = Query(None),
@@ -602,8 +832,12 @@ async def list_keywords(
         count_query = select(func.count(Keyword.id))
 
         if group_id is not None:
-            base_query = base_query.where(Keyword.group_id == group_id)
-            count_query = count_query.where(Keyword.group_id == group_id)
+            if group_id == -1:
+                base_query = base_query.where(Keyword.group_id.is_(None))
+                count_query = count_query.where(Keyword.group_id.is_(None))
+            else:
+                base_query = base_query.where(Keyword.group_id == group_id)
+                count_query = count_query.where(Keyword.group_id == group_id)
         if platform:
             base_query = base_query.where(Keyword.platform == platform)
             count_query = count_query.where(Keyword.platform == platform)
@@ -811,6 +1045,109 @@ def _build_classify_prompt(keyword: str, groups: list[dict]) -> str:
 - is_existing: true 表示归类到已有分组，false 表示需要新建分组
 - existing_group_id: 如果 is_existing=true，填写对应分组的数字 ID；否则填 null
 - reason: 简短说明为什么这样分类"""
+
+
+def _build_reclassify_prompt(
+    keywords: list[dict],
+    groups: list[dict],
+) -> str:
+    """构建全量重分类 prompt —— 强制要求输出两级分组结构"""
+    if groups:
+        groups_lines = []
+        for g in groups:
+            parent_info = f", 父分组: \"{g.get('parent_name', '')}\"" if g.get("parent_name") else ""
+            groups_lines.append(f"  - ID={g['id']}, \"{g['name']}\"{parent_info}")
+        groups_desc = "\n".join(groups_lines)
+        groups_instruction = f"""现有分组:
+{groups_desc}
+
+**关键要求: 请构建两级分组结构!**
+- 识别语义相近的现有分组，建议为它们创建父分组（例如: "自媒体教程""自媒体工具""自媒体运营" → 合并为父分组"自媒体"，它们作为子分组）
+- 新关键词如果不匹配任何现有分组，创建新的子分组并指定归属的父分组
+- parent_group 填已有分组的名称（用于挂载子分组）或新建议的父分组名称"""
+    else:
+        groups_instruction = "目前没有任何分组。请为关键词设计两级分组结构：先用大类别作为父分组，再细分为子分组。"
+
+    keywords_lines = "\n".join(
+        [f"  - ID={kw['id']}, \"{kw['keyword']}\", 平台: {kw['platform']}" for kw in keywords]
+    )
+
+    return f"""你是关键词分类专家。根据语义和领域，构建清晰的两级分组体系。
+
+{groups_instruction}
+
+待分类关键词:
+{keywords_lines}
+
+返回 JSON 数组（仅数组，不要 markdown）:
+[
+  {{
+    "keyword_id": {keywords[0]["id"]},
+    "keyword": "原文",
+    "suggested_group": "子分组名（2-8字）",
+    "is_new_group": false,
+    "parent_group": "父分组名（已有的或新建议的）",
+    "reason": "理由"
+  }}
+]
+
+规则:
+- 必须为每个关键词输出结果
+- suggested_group 用精确的子分类（如"Python教程"而非"编程"）
+- parent_group 用较宽泛的父分类（如"编程语言"）
+- 已有分组优先复用（is_new_group=false），不匹配时新建
+- 相似分组归并到同一父分组下，形成清晰的两级层级"""
+
+
+def _parse_reclassify_batch_response(
+    ai_text: str,
+    kw_data: list[dict],
+    batch_idx: int,
+) -> list[dict]:
+    """解析 AI 返回的重分类计划 JSON 数组，容错处理"""
+    raw_text = ai_text.strip()
+    if raw_text.startswith("```"):
+        lines = raw_text.split("\n")
+        if len(lines) >= 3:
+            lines = lines[1:]
+            if lines[-1].strip() == "```":
+                lines = lines[:-1]
+            raw_text = "\n".join(lines)
+
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        match = re.search(r'\[[\s\S]*\]', raw_text)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+            except json.JSONDecodeError:
+                raise HTTPException(500, f"第 {batch_idx + 1} 批 AI 返回无法解析: {ai_text[:300]}")
+        else:
+            raise HTTPException(500, f"第 {batch_idx + 1} 批 AI 返回无法解析: {ai_text[:300]}")
+
+    if not isinstance(parsed, list):
+        raise HTTPException(500, f"第 {batch_idx + 1} 批 AI 返回格式错误: 应为 JSON 数组")
+
+    kw_map = {kw["keyword"]: kw["id"] for kw in kw_data}
+    plans = []
+    for item in parsed:
+        suggested_group = (item.get("suggested_group") or "").strip()
+        if not suggested_group:
+            continue
+        kw_id = item.get("keyword_id")
+        kw_text = (item.get("keyword") or "").strip()
+        if not kw_id and kw_text:
+            kw_id = kw_map.get(kw_text)
+        plans.append({
+            "keyword_id": kw_id,
+            "keyword": kw_text,
+            "suggested_group": suggested_group,
+            "is_new_group": item.get("is_new_group", False),
+            "parent_group": item.get("parent_group") or None,
+            "reason": item.get("reason", ""),
+        })
+    return plans
 
 
 async def _do_classify_keyword(
@@ -1214,6 +1551,12 @@ async def get_keyword_stats():
             for row in status_result.all()
         ]
 
+        # Ungrouped count
+        ungrouped_result = await session.execute(
+            select(func.count(Keyword.id)).where(Keyword.group_id.is_(None))
+        )
+        ungrouped_count = ungrouped_result.scalar() or 0
+
         # Top performing (by results_count)
         top_result = await session.execute(
             select(
@@ -1235,6 +1578,7 @@ async def get_keyword_stats():
 
         return StatsResponse(
             total_keywords=total_keywords,
+            ungrouped_count=ungrouped_count,
             by_group=by_group,
             by_status=by_status,
             top_performing=top_performing,

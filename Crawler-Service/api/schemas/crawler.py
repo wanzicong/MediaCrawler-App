@@ -77,6 +77,7 @@ class CrawlerStartRequest(BaseModel):
     crawler_max_sleep_sec: int | None = None
     crawler_max_sleep_sec_max: int | None = None
     max_concurrency_num: int | None = None
+    execute_now: bool = True  # True=立即执行(默认), False=仅创建任务(待执行)
 
 
 class CrawlerStatusResponse(BaseModel):

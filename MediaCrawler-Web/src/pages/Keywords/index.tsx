@@ -22,9 +22,11 @@ import {
   EditOutlined,
   ExperimentOutlined,
   PlusOutlined,
+  ReloadOutlined,
   RocketOutlined,
   StarOutlined,
   TagOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -43,7 +45,9 @@ import {
   fissionKeywords,
   fetchKeywordStats,
   runKeyword,
+  autoClassifyKeyword,
   batchAutoClassify,
+  reclassifyAllKeywords,
   type Keyword,
   type KeywordGroup,
   type FissionResult,
@@ -72,6 +76,7 @@ export default function KeywordsPage() {
   const navigate = useNavigate();
 
   const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
+  const [expandedParents, setExpandedParents] = useState<Set<number>>(new Set());
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [keywordSearch, setKeywordSearch] = useState('');
@@ -253,6 +258,37 @@ export default function KeywordsPage() {
       message.success(`AI 分类完成，共分类 ${res.classified} 个关键词`);
       void queryClient.invalidateQueries({ queryKey: ['keywords'] });
       void queryClient.invalidateQueries({ queryKey: ['keyword-stats'] });
+      void queryClient.invalidateQueries({ queryKey: ['keyword-groups'] });
+    },
+  });
+
+  const reclassifyAllMut = useMutation({
+    mutationFn: () => reclassifyAllKeywords(),
+    onSuccess: (res) => {
+      modal.success({
+        title: '全部重新分类完成',
+        content: (
+          <Space direction="vertical" size={6}>
+            <Text>处理关键词：<Text strong>{res.processed}</Text> 个</Text>
+            <Text>新建分组：<Text strong style={{ color: '#52c41a' }}>{res.groups_created}</Text> 个</Text>
+            <Text>重新分配：<Text strong style={{ color: '#1677ff' }}>{res.keywords_reassigned}</Text> 个</Text>
+          </Space>
+        ),
+        width: 360,
+      });
+      void queryClient.invalidateQueries({ queryKey: ['keywords'] });
+      void queryClient.invalidateQueries({ queryKey: ['keyword-stats'] });
+      void queryClient.invalidateQueries({ queryKey: ['keyword-groups'] });
+    },
+  });
+
+  const classifySingleMut = useMutation({
+    mutationFn: (keywordId: number) => autoClassifyKeyword(keywordId),
+    onSuccess: (res) => {
+      message.success(`「${res.keyword}」已分类至「${res.group_name}」`);
+      void queryClient.invalidateQueries({ queryKey: ['keywords'] });
+      void queryClient.invalidateQueries({ queryKey: ['keyword-stats'] });
+      void queryClient.invalidateQueries({ queryKey: ['keyword-groups'] });
     },
   });
 
@@ -340,6 +376,15 @@ export default function KeywordsPage() {
                 });
               }}
             />
+            {r.group_id === null && (
+              <Button
+                type="link"
+                size="small"
+                icon={<ThunderboltOutlined />}
+                loading={classifySingleMut.isPending && classifySingleMut.variables === r.id}
+                onClick={() => classifySingleMut.mutate(r.id)}
+              />
+            )}
             <Button
               type="link"
               size="small"
@@ -437,9 +482,12 @@ export default function KeywordsPage() {
   };
 
   const handleDeleteGroup = (g: KeywordGroup) => {
+    const hasChildren = g.children && g.children.length > 0;
     modal.confirm({
       title: '确认删除',
-      content: `分组「${g.name}」下的所有关键词也会被删除，确定继续吗？`,
+      content: hasChildren
+        ? `分组「${g.name}」及其 ${g.children.length} 个子分组和所有关键词都会被删除，确定继续吗？`
+        : `分组「${g.name}」下的所有关键词也会被删除，确定继续吗？`,
       okText: '删除',
       okType: 'danger',
       cancelText: '取消',
@@ -470,42 +518,102 @@ export default function KeywordsPage() {
         </div>
         <div className={styles.groupList}>
           <div
-            className={`${styles.groupItem} ${selectedGroup === null ? styles.groupItemActive : ''}`}
-            onClick={() => setSelectedGroup(null)}
+            className={`${styles.groupItem} ${selectedGroup === null && !selectedRowKeys.length ? styles.groupItemActive : ''}`}
+            onClick={() => { setSelectedGroup(null); setPage(1); }}
           >
             <span className={styles.groupName}>全部</span>
-            <span className={styles.groupCount}>{kwData?.total ?? 0}</span>
+            <span className={styles.groupCount}>{stats?.total_keywords ?? 0}</span>
           </div>
-          {(groups ?? []).map((g) => (
-            <div
-              key={g.id}
-              className={`${styles.groupItem} ${selectedGroup === g.id ? styles.groupItemActive : ''}`}
-              onClick={() => setSelectedGroup(g.id)}
-            >
-              <span className={styles.groupColorDot} style={{ background: g.color }} />
-              <span className={styles.groupName}>{g.name}</span>
-              <span className={styles.groupCount}>{g.keyword_count ?? 0}</span>
-              <Button
-                type="text"
-                size="small"
-                icon={<EditOutlined style={{ fontSize: 11 }} />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleEditGroup(g);
-                }}
-              />
-              <Button
-                type="text"
-                size="small"
-                danger
-                icon={<DeleteOutlined style={{ fontSize: 11 }} />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteGroup(g);
-                }}
-              />
-            </div>
-          ))}
+          <div
+            className={`${styles.groupItem} ${selectedGroup === -1 ? styles.groupItemActive : ''}`}
+            onClick={() => { setSelectedGroup(-1); setPage(1); }}
+            style={{ borderLeft: selectedGroup === -1 ? undefined : '2px solid transparent' }}
+          >
+            <span className={styles.groupName} style={{ color: '#fa8c16' }}>未分类</span>
+            <span className={styles.groupCount}>{stats?.ungrouped_count ?? 0}</span>
+          </div>
+          {/* Tree groups */}
+          {(groups ?? []).map((g) => {
+            const hasChildren = g.children && g.children.length > 0;
+            const isExpanded = expandedParents.has(g.id);
+            return (
+              <div key={g.id}>
+                <div
+                  className={`${styles.groupItem} ${selectedGroup === g.id ? styles.groupItemActive : ''}`}
+                  onClick={() => { setSelectedGroup(g.id); setPage(1); }}
+                >
+                  <span
+                    style={{ cursor: 'pointer', width: 14, fontSize: 10, flexShrink: 0, textAlign: 'center' }}
+                    onClick={hasChildren ? (e) => {
+                      e.stopPropagation();
+                      setExpandedParents((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(g.id)) next.delete(g.id); else next.add(g.id);
+                        return next;
+                      });
+                    } : undefined}
+                  >
+                    {hasChildren ? (isExpanded ? '▼' : '▶') : ''}
+                  </span>
+                  <span className={styles.groupColorDot} style={{ background: g.color }} />
+                  <span className={styles.groupName}>{g.name}</span>
+                  <span className={styles.groupCount}>{g.keyword_count ?? 0}</span>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<EditOutlined style={{ fontSize: 11 }} />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEditGroup(g);
+                    }}
+                  />
+                  <Button
+                    type="text"
+                    size="small"
+                    danger
+                    icon={<DeleteOutlined style={{ fontSize: 11 }} />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteGroup(g);
+                    }}
+                  />
+                </div>
+                {/* Sub-groups */}
+                {hasChildren && isExpanded && g.children.map((child) => (
+                  <div
+                    key={child.id}
+                    className={`${styles.groupItem} ${selectedGroup === child.id ? styles.groupItemActive : ''}`}
+                    style={{ paddingLeft: 40 }}
+                    onClick={() => { setSelectedGroup(child.id); setPage(1); }}
+                  >
+                    <span style={{ width: 14, flexShrink: 0 }} />
+                    <span className={styles.groupColorDot} style={{ background: child.color }} />
+                    <span className={styles.groupName}>{child.name}</span>
+                    <span className={styles.groupCount}>{child.keyword_count ?? 0}</span>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<EditOutlined style={{ fontSize: 11 }} />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditGroup(child);
+                      }}
+                    />
+                    <Button
+                      type="text"
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined style={{ fontSize: 11 }} />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteGroup(child);
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -587,12 +695,59 @@ export default function KeywordsPage() {
             >
               AI 分类
             </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              danger
+              loading={reclassifyAllMut.isPending}
+              onClick={() => {
+                const totalCount = stats?.total_keywords ?? 0;
+                modal.confirm({
+                  title: '全部重新分类',
+                  width: 440,
+                  content: (
+                    <Space direction="vertical" size={8}>
+                      <Text>
+                        将对所有 <Text strong>{totalCount}</Text> 个关键词进行完全重新分类
+                      </Text>
+                      <Text type="warning">
+                        AI 可能创建新分组或删除空分组
+                      </Text>
+                      <Text type="danger">
+                        此操作不可撤销，建议先备份
+                      </Text>
+                    </Space>
+                  ),
+                  okText: '确认重新分类',
+                  okType: 'danger',
+                  cancelText: '取消',
+                  onOk: () => reclassifyAllMut.mutate(),
+                });
+              }}
+            >
+              全部重新分类
+            </Button>
           </div>
         </div>
 
         {selectedRowKeys.length > 0 && (
           <div className={styles.batchBar}>
             <span className={styles.selectedCount}>已选 {selectedRowKeys.length} 项</span>
+            <Button
+              size="small"
+              icon={<ThunderboltOutlined />}
+              loading={batchAutoClassifyMut.isPending}
+              onClick={() => {
+                modal.confirm({
+                  title: 'AI 自动分类',
+                  content: `将对选中的 ${selectedRowKeys.length} 个关键词进行 AI 自动分类，确认继续？`,
+                  okText: '开始分类',
+                  cancelText: '取消',
+                  onOk: () => batchAutoClassifyMut.mutate(selectedRowKeys),
+                });
+              }}
+            >
+              批量分类
+            </Button>
             <Button size="small" danger onClick={() => {
               modal.confirm({
                 title: '批量删除',
@@ -940,6 +1095,15 @@ export default function KeywordsPage() {
             }
           }}
         >
+          <Form.Item name="parent_id" label="父分组（二级分类）">
+            <Select
+              allowClear
+              placeholder="留空则为一级分组"
+              options={(groups ?? [])
+                .filter((g) => g.parent_id === null && g.id !== editingGroup?.id)
+                .map((g) => ({ value: g.id, label: g.name }))}
+            />
+          </Form.Item>
           <Form.Item name="name" label="分组名称" rules={[{ required: true, message: '请输入名称' }]}>
             <Input placeholder="例如：电商、美妆、旅行" />
           </Form.Item>

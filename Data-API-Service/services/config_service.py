@@ -249,6 +249,7 @@ class ConfigService:
         page: int = 1,
         page_size: int = 20,
         status: Optional[str] = None,
+        platform: Optional[str] = None,
     ) -> dict:
         page = max(1, page)
         page_size = min(max(1, page_size), 100)
@@ -261,6 +262,13 @@ class ConfigService:
             if status:
                 count_stmt = count_stmt.where(CrawlerTask.status == status)
                 list_stmt = list_stmt.where(CrawlerTask.status == status)
+
+            if platform:
+                # payload_snapshot 是 JSON 列，用 JSON_EXTRACT 过滤 platform 字段
+                from sqlalchemy import func as sa_func
+                platform_filter = sa_func.json_extract(CrawlerTask.payload_snapshot, '$.platform') == platform
+                count_stmt = count_stmt.where(platform_filter)
+                list_stmt = list_stmt.where(platform_filter)
 
             list_stmt = list_stmt.offset(offset).limit(page_size)
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Button, Input, Select, Space, Tag } from 'antd';
 import { SortAscendingOutlined } from '@ant-design/icons';
+import type { TaskInfo } from '@/api/modules/dataDb';
 
 interface KindOption {
   value: string;
@@ -28,6 +29,9 @@ interface Props {
   sortOptions: SortOption[];
   orderBy?: string;
   orderDirection?: string;
+  filterTaskId: string | null;
+  availableTasks: TaskInfo[];
+  tasksLoading: boolean;
   onPlatformChange: (v: string) => void;
   onKindChange: (v: string) => void;
   onKeywordChange: (v: string) => void;
@@ -35,6 +39,7 @@ interface Props {
   onClearFilters: () => void;
   onOrderByChange?: (v: string) => void;
   onOrderDirectionChange?: (v: string) => void;
+  onTaskIdChange: (v: string | null) => void;
 }
 
 export default function DataFilterBar({
@@ -48,6 +53,9 @@ export default function DataFilterBar({
   sortOptions,
   orderBy,
   orderDirection,
+  filterTaskId,
+  availableTasks,
+  tasksLoading,
   onPlatformChange,
   onKindChange,
   onKeywordChange,
@@ -55,6 +63,7 @@ export default function DataFilterBar({
   onClearFilters,
   onOrderByChange,
   onOrderDirectionChange,
+  onTaskIdChange,
 }: Props) {
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -85,6 +94,24 @@ export default function DataFilterBar({
         value={kind}
         options={kinds.map((k) => ({ value: k.value, label: k.label }))}
         onChange={onKindChange}
+      />
+      <Select
+        style={{ minWidth: 200, maxWidth: 320 }}
+        placeholder="筛选任务（按关键词）"
+        allowClear
+        showSearch
+        loading={tasksLoading}
+        value={filterTaskId || undefined}
+        onChange={(v) => onTaskIdChange(v ?? null)}
+        filterOption={(input, option) => {
+          const label = String(option?.label ?? '').toLowerCase();
+          return label.includes(input.toLowerCase());
+        }}
+        options={availableTasks.map((t) => ({
+          value: String(t.task_id),
+          label: `#${t.task_id} ${t.keywords ? `— ${t.keywords.slice(0, 40)}${t.keywords.length > 40 ? '...' : ''}` : ''} (${t.record_count}条)`,
+        }))}
+        notFoundContent={tasksLoading ? '加载中...' : '当前数据无关联任务'}
       />
       <Input.Search
         placeholder="标题关键词（实时搜索）"

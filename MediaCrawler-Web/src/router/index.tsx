@@ -13,6 +13,7 @@ const KeywordsPage = lazy(() => import('@/pages/Keywords'));
 const ProPage = lazy(() => import('@/pages/Pro'));
 const CommentsPage = lazy(() => import('@/pages/Comments'));
 const PipelinesPage = lazy(() => import('@/pages/Pipelines'));
+const ZhihuDetailPage = lazy(() => import('@/pages/ZhihuDetail'));
 const NotFoundPage = lazy(() => import('@/pages/NotFound'));
 
 function PageLoader() {
@@ -68,6 +69,10 @@ export const router = createBrowserRouter([
       {
         path: 'pipelines',
         element: withSuspense(<PipelinesPage />),
+      },
+      {
+        path: 'zhihu/:contentId',
+        element: withSuspense(<ZhihuDetailPage />),
       },
     ],
   },

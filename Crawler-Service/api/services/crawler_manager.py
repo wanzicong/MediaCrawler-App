@@ -251,6 +251,17 @@ class CrawlerManager:
             # 自动记录关键词到关键词管理模块（异步，不阻塞爬虫启动）
             asyncio.create_task(self._auto_record_keywords(config, task["task_id"]))
 
+            # 如果仅创建任务不立即执行，直接返回
+            if not config.execute_now:
+                self.current_task_id = None
+                self.status = "idle"
+                entry = self._create_log_entry(
+                    f"Task #{task['task_id']} created (pending, not executed yet)",
+                    "info",
+                )
+                await self._push_log(entry)
+                return {"started": False, "queued": False, "task_id": task["task_id"], "created": True}
+
             cmd = self._build_command(self.current_task_id)
 
             entry = self._create_log_entry(
@@ -291,6 +302,91 @@ class CrawlerManager:
                 entry = self._create_log_entry(f"Failed to start crawler: {str(e)}", "error")
                 await self._push_log(entry)
                 return {"started": False, "queued": False, "error": str(e)}
+        finally:
+            async with self._lock:
+                self._starting = False
+
+    async def execute_task(self, task_id: int) -> dict:
+        """执行一个待执行的任务（status=pending）"""
+        async with self._lock:
+            if self._starting:
+                return {"started": False, "error": "另一个启动请求正在处理中"}
+
+            if self.process and self.process.poll() is None:
+                return {"started": False, "error": "爬虫正忙，请稍后再试"}
+
+            # 获取任务配置
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(f"{DATA_API_URL}/api/internal/tasks/{task_id}")
+                    if resp.status_code != 200:
+                        return {"started": False, "error": f"任务 #{task_id} 不存在"}
+                    task_data = resp.json()
+            except Exception as e:
+                return {"started": False, "error": f"获取任务信息失败: {str(e)}"}
+
+            if task_data.get("status") not in ("pending", "failed"):
+                return {"started": False, "error": f"任务状态为 {task_data.get('status')}，无法执行"}
+
+            self._starting = True
+
+        try:
+            # Clean up old state
+            if self._read_task and not self._read_task.done():
+                self._read_task.cancel()
+                try:
+                    await self._read_task
+                except asyncio.CancelledError:
+                    pass
+            self._read_task = None
+
+            if self.process and self.process.poll() is not None:
+                self.process = None
+
+            self._logs = []
+            self._log_id = 0
+            if self._log_queue is None:
+                self._log_queue = asyncio.Queue()
+            else:
+                try:
+                    while True:
+                        self._log_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+
+            self.current_task_id = task_id
+            cmd = self._build_command(task_id)
+
+            entry = self._create_log_entry(
+                f"Executing pending task #{task_id}: {' '.join(cmd)}",
+                "info",
+            )
+            await self._push_log(entry)
+
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                bufsize=1,
+                cwd=str(self._project_root),
+                env={**os.environ, "PYTHONUNBUFFERED": "1"}
+            )
+            self.status = "running"
+            self.started_at = datetime.now()
+
+            entry = self._create_log_entry(f"Pending task #{task_id} started", "success")
+            await self._push_log(entry)
+
+            self._read_task = asyncio.create_task(self._read_output())
+            return {"started": True, "task_id": task_id}
+        except Exception as e:
+            self.status = "error"
+            entry = self._create_log_entry(f"Failed to execute task #{task_id}: {str(e)}", "error")
+            await self._push_log(entry)
+            await self._mark_task_finished_via_api(task_id, False, f"Execute failed: {str(e)}")
+            return {"started": False, "error": str(e)}
         finally:
             async with self._lock:
                 self._starting = False
