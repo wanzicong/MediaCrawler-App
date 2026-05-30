@@ -105,7 +105,7 @@ export default function CrawlerPage() {
   });
 
   const stopMutation = useMutation({
-    mutationFn: stopCrawler,
+    mutationFn: (taskId?: number) => stopCrawler(taskId),
     onSuccess: () => {
       message.success('已发送停止指令');
       void queryClient.invalidateQueries({ queryKey: ['crawler', 'status'] });
@@ -231,19 +231,42 @@ export default function CrawlerPage() {
         title="爬虫任务"
         description="启动爬虫或查看历史任务记录"
         extra={
-          <Space>
+          <Space wrap>
             <Tag color={isRunning ? 'processing' : 'default'}>
-              {statusLoading ? '…' : isRunning ? '运行中' : '空闲'}
+              {statusLoading ? '…' : isRunning
+                ? `运行中 ${status?.running_count ?? 0}/${status?.max_concurrent ?? 3}`
+                : '空闲'}
             </Tag>
-            {status?.task_id && <Tag>任务 #{status.task_id}</Tag>}
+            {status?.running_tasks?.map((t) => (
+              <Tag key={t.task_id} color="blue" closable
+                onClose={(e) => {
+                  e.preventDefault();
+                  modal.confirm({
+                    title: '停止任务',
+                    content: `确定要停止任务 #${t.task_id}（${t.platform}）吗？`,
+                    okText: '停止', okType: 'danger', cancelText: '取消',
+                    onOk: () => stopMutation.mutate(t.task_id),
+                  });
+                }}
+              >
+                任务 #{t.task_id} {t.platform}
+              </Tag>
+            ))}
             <Button
               danger
               icon={<StopOutlined />}
               loading={stopMutation.isPending}
               disabled={!isRunning}
-              onClick={() => stopMutation.mutate()}
+              onClick={() => {
+                modal.confirm({
+                  title: '停止所有任务',
+                  content: `确定要停止全部 ${status?.running_count ?? 0} 个正在运行的爬虫吗？`,
+                  okText: '全部停止', okType: 'danger', cancelText: '取消',
+                  onOk: () => stopMutation.mutate(),
+                });
+              }}
             >
-              停止
+              停止全部
             </Button>
             <Button
               icon={<ClearOutlined />}
@@ -289,7 +312,7 @@ export default function CrawlerPage() {
                 profiles={profiles}
                 platforms={platforms?.map((p) => ({ value: p.code as PlatformCode, label: p.name, icon: p.icon }))}
                 options={options}
-                isRunning={isRunning}
+                atCapacity={(status?.running_count ?? 0) >= (status?.max_concurrent ?? 3)}
                 isPending={startMutation.isPending}
                 applyProfile={applyProfile}
                 onSave={handleSave}
@@ -320,7 +343,7 @@ export default function CrawlerPage() {
                 onDelete={handleDelete}
                 onExecute={handleExecute}
                 onRefresh={handleRefresh}
-                onStop={() => stopMutation.mutate()}
+                onStop={(taskId) => stopMutation.mutate(taskId)}
                 stopPending={stopMutation.isPending}
               />
             ),

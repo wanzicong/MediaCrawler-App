@@ -26,7 +26,7 @@ interface Props {
   profiles?: CrawlerProfile[];
   platforms?: PlatformItem[];
   options?: ConfigOptionsResponse;
-  isRunning: boolean;
+  atCapacity: boolean;
   isPending: boolean;
   applyProfile: (id: number) => void;
   onSave: (values: CrawlerStartPayload & { profile_id?: number }) => void;
@@ -38,7 +38,7 @@ export default function CrawlerLaunchForm({
   profiles,
   platforms,
   options,
-  isRunning,
+  atCapacity,
   isPending,
   applyProfile,
   onSave,
@@ -95,7 +95,7 @@ export default function CrawlerLaunchForm({
         onValuesChange={() => {
           dirtyRef.current = true;
         }}
-        disabled={isRunning}
+        disabled={atCapacity}
       >
         <Form.Item name="profile_id" label="配置方案">
           <Select
@@ -233,7 +233,7 @@ export default function CrawlerLaunchForm({
             <Button
               icon={<PlayCircleOutlined />}
               loading={isPending}
-              disabled={isRunning}
+              disabled={atCapacity}
               onClick={() => {
                 form.validateFields().then((values) => onSave(values)).catch(() => {});
               }}
@@ -244,7 +244,7 @@ export default function CrawlerLaunchForm({
               type="primary"
               icon={<PlayCircleOutlined />}
               loading={isPending}
-              disabled={isRunning}
+              disabled={atCapacity}
               onClick={() => {
                 form.validateFields().then((values) => onSaveAndRun(values)).catch(() => {});
               }}

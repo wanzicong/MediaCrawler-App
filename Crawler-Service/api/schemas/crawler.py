@@ -80,6 +80,15 @@ class CrawlerStartRequest(BaseModel):
     execute_now: bool = True  # True=立即执行(默认), False=仅创建任务(待执行)
 
 
+class RunningTaskInfo(BaseModel):
+    """Single running task info"""
+    task_id: int
+    platform: Optional[str] = None
+    crawler_type: Optional[str] = None
+    started_at: Optional[str] = None
+    status: str = "running"
+
+
 class CrawlerStatusResponse(BaseModel):
     """Crawler status response"""
     status: Literal["idle", "running", "stopping", "error"]
@@ -89,6 +98,9 @@ class CrawlerStatusResponse(BaseModel):
     error_message: Optional[str] = None
     task_id: Optional[int] = None
     queue_length: int = 0
+    running_count: int = 0
+    max_concurrent: int = 3
+    running_tasks: list[RunningTaskInfo] = []
 
 
 class LogEntry(BaseModel):

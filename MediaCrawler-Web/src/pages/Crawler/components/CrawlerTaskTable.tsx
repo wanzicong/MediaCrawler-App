@@ -37,7 +37,7 @@ interface Props {
   onDelete: (taskId: number) => void;
   onExecute: (taskId: number) => void;
   onRefresh: () => void;
-  onStop?: () => void;
+  onStop?: (taskId: number) => void;
   stopPending?: boolean;
 }
 
@@ -145,7 +145,7 @@ export default function CrawlerTaskTable({
               loading={stopPending}
               onClick={(e) => {
                 e.stopPropagation();
-                onStop();
+                onStop(r.id);
               }}
             >
               停止

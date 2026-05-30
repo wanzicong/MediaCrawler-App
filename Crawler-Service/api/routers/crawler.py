@@ -19,7 +19,9 @@
 import os
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from typing import Optional
+
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from ..schemas import CrawlerStartRequest, CrawlerStatusResponse
 from ..schemas.config_mgmt import TaskResponse
@@ -38,6 +40,13 @@ async def start_crawler(request: CrawlerStartRequest):
             "status": "ok",
             "message": "爬虫已启动",
             "task_id": result["task_id"],
+        }
+    if result.get("created"):
+        return {
+            "status": "ok",
+            "message": f"任务 #{result['task_id']} 已创建（待执行）",
+            "task_id": result["task_id"],
+            "created": True,
         }
     if result.get("queued"):
         return {
@@ -169,20 +178,17 @@ async def delete_task(task_id: int):
 
 
 @router.post("/stop")
-async def stop_crawler():
-    """Stop crawler task"""
-    success = await crawler_manager.stop()
-    if not success:
-        if not crawler_manager.process or crawler_manager.process.poll() is not None:
-            raise HTTPException(status_code=400, detail="No crawler is running")
-        raise HTTPException(status_code=500, detail="Failed to stop crawler")
-
-    return {"status": "ok", "message": "Crawler stopped successfully"}
+async def stop_crawler(task_id: Optional[int] = Body(None)):
+    """Stop crawler task(s). task_id=None stops all running tasks."""
+    result = await crawler_manager.stop(task_id=task_id)
+    if not result.get("stopped"):
+        raise HTTPException(status_code=400, detail=result.get("error", "No crawler is running"))
+    return {"status": "ok", "message": f"Stopped tasks: {result['task_ids']}", "task_ids": result["task_ids"]}
 
 
 @router.get("/status", response_model=CrawlerStatusResponse)
 async def get_crawler_status():
-    """Get crawler status"""
+    """Get crawler status (includes running_tasks list for multi-task)"""
     return crawler_manager.get_status()
 
 

@@ -39,6 +39,14 @@ export interface CrawlerStartPayload {
   headless?: boolean;
 }
 
+export interface RunningTaskInfo {
+  task_id: number;
+  platform?: string | null;
+  crawler_type?: string | null;
+  started_at?: string | null;
+  status: string;
+}
+
 export interface CrawlerStatusResponse {
   status: CrawlerStatus;
   platform?: string | null;
@@ -47,6 +55,9 @@ export interface CrawlerStatusResponse {
   message?: string | null;
   task_id?: number | null;
   queue_length?: number;
+  running_count?: number;
+  max_concurrent?: number;
+  running_tasks?: RunningTaskInfo[];
 }
 
 export interface ApiResponse<T = unknown> {

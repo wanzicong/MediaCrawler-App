@@ -36,8 +36,8 @@ export function rerunCrawlerTask(taskId: number) {
   return httpPost<TaskRerunResponse>(`/api/crawler/tasks/${taskId}/rerun`);
 }
 
-export function stopCrawler() {
-  return httpPost<ApiResponse>('/api/crawler/stop');
+export function stopCrawler(taskId?: number) {
+  return httpPost<ApiResponse>('/api/crawler/stop', taskId !== undefined ? { task_id: taskId } : {});
 }
 
 export function deleteCrawlerTask(taskId: number) {
