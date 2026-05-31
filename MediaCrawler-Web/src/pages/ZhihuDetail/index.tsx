@@ -1,13 +1,13 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   App, Button, Card, Descriptions, Divider, Skeleton, Space, Tag, Typography, Result, Empty, Tooltip,
 } from 'antd';
 import {
   ArrowLeftOutlined, ExportOutlined, LikeOutlined, CommentOutlined, ClockCircleOutlined,
-  UserOutlined, RocketOutlined, RobotOutlined, PlusOutlined,
-  LeftOutlined, RightOutlined,
+  UserOutlined, RocketOutlined, RobotOutlined, PlusOutlined, CheckOutlined,
+  LeftOutlined, RightOutlined, PushpinOutlined,
 } from '@ant-design/icons';
 import { fetchDbData } from '@/api';
 import { fetchContentNeighbors } from '@/api/modules/dataDb';
@@ -31,7 +31,6 @@ function sanitizeHtml(html: string): string {
 export default function ZhihuDetailPage() {
   const { contentId } = useParams<{ contentId: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const returnPath = sessionStorage.getItem('dataPageReturnUrl') || '/data';
   const { message, modal } = App.useApp();
 
@@ -171,9 +170,67 @@ export default function ZhihuDetailPage() {
   const isLast = !nextContentId && !neighborsLoading;
 
   const navigateToItem = useCallback((targetContentId: string) => {
-    // 用 API 返回的邻居数据构建缓存窗口（相对于目标项），供后续导航使用
     navigate(`/zhihu/${targetContentId}`);
   }, [navigate]);
+
+  // ── 文本选中添加关键词 ──────────────────────────────────────
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [selectionPopup, setSelectionPopup] = useState<{
+    text: string; x: number; y: number; visible: boolean;
+  }>({ text: '', x: 0, y: 0, visible: false });
+
+  useEffect(() => {
+    const handleMouseUp = () => {
+      setTimeout(() => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+          setSelectionPopup((p) => (p.visible ? { ...p, visible: false } : p));
+          return;
+        }
+        const selectedText = sel.toString().trim();
+        if (!selectedText || selectedText.length < 2) {
+          setSelectionPopup((p) => (p.visible ? { ...p, visible: false } : p));
+          return;
+        }
+        // 只响应用户在内容区域内的选中
+        const container = contentRef.current;
+        if (!container) return;
+        const range = sel.getRangeAt(0);
+        if (!container.contains(range.commonAncestorContainer)) {
+          setSelectionPopup((p) => (p.visible ? { ...p, visible: false } : p));
+          return;
+        }
+        const rect = range.getBoundingClientRect();
+        setSelectionPopup({
+          text: selectedText.length > 30 ? selectedText.slice(0, 30) + '…' : selectedText,
+          x: rect.left + rect.width / 2,
+          y: rect.top - 12,
+          visible: true,
+        });
+      }, 10);
+    };
+    const handleMouseDown = (e: MouseEvent) => {
+      // 点击弹窗外关闭
+      if (selectionPopup.visible) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('.selection-keyword-popup')) {
+          setSelectionPopup((p) => ({ ...p, visible: false }));
+        }
+      }
+    };
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => {
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousedown', handleMouseDown);
+    };
+  }, [selectionPopup.visible]);
+
+  const handleAddSelectionKeyword = useCallback(() => {
+    if (!selectionPopup.text) return;
+    addKeywordsMut.mutate([selectionPopup.text]);
+    setSelectionPopup((p) => ({ ...p, visible: false }));
+  }, [selectionPopup.text, addKeywordsMut]);
 
   if (isLoading) {
     return (
@@ -265,64 +322,111 @@ export default function ZhihuDetailPage() {
       />
 
       <Card style={{ borderRadius: 12 }}>
-        {/* 标题区 */}
-        <div style={{ marginBottom: 16 }}>
-          <Space style={{ marginBottom: 8 }}>
-            <Tag color={typeInfo.color} style={{ fontSize: 13, padding: '2px 10px' }}>{typeInfo.label}</Tag>
-            {hasHtml ? (
-              <Tag color="processing">HTML 格式</Tag>
-            ) : (
-              <Tag>纯文本</Tag>
-            )}
-          </Space>
-          <Typography.Title level={4} style={{ margin: 0 }}>{title}</Typography.Title>
+        {/* 内容正文区域（文本选中添加关键词的作用域） */}
+        <div ref={contentRef}>
+          {/* 标题区 */}
+          <div style={{ marginBottom: 16 }}>
+            <Space style={{ marginBottom: 8 }}>
+              <Tag color={typeInfo.color} style={{ fontSize: 13, padding: '2px 10px' }}>{typeInfo.label}</Tag>
+              {hasHtml ? (
+                <Tag color="processing">HTML 格式</Tag>
+              ) : (
+                <Tag>纯文本</Tag>
+              )}
+            </Space>
+            <Typography.Title level={4} style={{ margin: 0 }}>{title}</Typography.Title>
+          </div>
+
+          {/* 作者 + 统计 */}
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 20,
+            padding: '12px 16px', background: '#fafafa', borderRadius: 8,
+          }}>
+            <Space>
+              <UserOutlined />
+              <Typography.Text strong>{String(data.user_nickname || '未知作者')}</Typography.Text>
+            </Space>
+            <Space>
+              <LikeOutlined />
+              <span>{data.voteup_count ?? 0} 赞同</span>
+            </Space>
+            <Space>
+              <CommentOutlined />
+              <span>{data.comment_count ?? 0} 评论</span>
+            </Space>
+            <Space>
+              <ClockCircleOutlined />
+              <span>{formatText('created_time', data.created_time)}</span>
+            </Space>
+          </div>
+
+          <Divider style={{ margin: '0 0 20px 0' }} />
+
+          {/* 内容正文 */}
+          {isHtmlRender ? (
+            <div
+              style={{
+                fontSize: 15, lineHeight: 1.85, color: '#333',
+                wordBreak: 'break-word', overflowWrap: 'break-word',
+                maxWidth: '100%', userSelect: 'text',
+              }}
+              dangerouslySetInnerHTML={{ __html: contentBody }}
+            />
+          ) : (
+            <Typography.Paragraph
+              style={{
+                fontSize: 15, lineHeight: 1.85, whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word', userSelect: 'text',
+              }}
+            >
+              {contentBody || '（无内容）'}
+            </Typography.Paragraph>
+          )}
+
+          {/* 文本选中弹窗 */}
+          {selectionPopup.visible && (
+            <div
+              className="selection-keyword-popup"
+              style={{
+                position: 'fixed',
+                left: selectionPopup.x,
+                top: selectionPopup.y,
+                transform: 'translate(-50%, -100%)',
+                zIndex: 1050,
+                background: '#fff',
+                borderRadius: 8,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 13,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <PushpinOutlined style={{ color: '#1677ff', fontSize: 14 }} />
+              <span style={{
+                maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis',
+                color: '#333', fontWeight: 500,
+              }}>
+                "{selectionPopup.text}"
+              </span>
+              {addedKeywords.has(selectionPopup.text) ? (
+                <Tag color="success" icon={<CheckOutlined />} style={{ margin: 0 }}>已添加</Tag>
+              ) : (
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<PlusOutlined />}
+                  loading={addKeywordsMut.isPending}
+                  onClick={handleAddSelectionKeyword}
+                >
+                  添加为关键词
+                </Button>
+              )}
+            </div>
+          )}
         </div>
-
-        {/* 作者 + 统计 */}
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 20,
-          padding: '12px 16px', background: '#fafafa', borderRadius: 8,
-        }}>
-          <Space>
-            <UserOutlined />
-            <Typography.Text strong>{String(data.user_nickname || '未知作者')}</Typography.Text>
-          </Space>
-          <Space>
-            <LikeOutlined />
-            <span>{data.voteup_count ?? 0} 赞同</span>
-          </Space>
-          <Space>
-            <CommentOutlined />
-            <span>{data.comment_count ?? 0} 评论</span>
-          </Space>
-          <Space>
-            <ClockCircleOutlined />
-            <span>{formatText('created_time', data.created_time)}</span>
-          </Space>
-        </div>
-
-        <Divider style={{ margin: '0 0 20px 0' }} />
-
-        {/* 内容正文 */}
-        {isHtmlRender ? (
-          <div
-            style={{
-              fontSize: 15, lineHeight: 1.85, color: '#333',
-              wordBreak: 'break-word', overflowWrap: 'break-word',
-              maxWidth: '100%',
-            }}
-            dangerouslySetInnerHTML={{ __html: contentBody }}
-          />
-        ) : (
-          <Typography.Paragraph
-            style={{
-              fontSize: 15, lineHeight: 1.85, whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}
-          >
-            {contentBody || '（无内容）'}
-          </Typography.Paragraph>
-        )}
 
         {/* AI 分析结果 */}
         {aiResult && (
