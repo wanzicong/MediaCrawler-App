@@ -23,6 +23,7 @@ interface Props {
   crawlPending?: boolean;
   onCrawlCreator?: (row: Record<string, unknown>) => void;
   creatorCrawlPending?: boolean;
+  listContext?: { searchKeyword: string; filterTaskId: string | null; orderBy: string; orderDirection: string; page: number };
 }
 
 const COVER_FIELDS = ['video_cover_url', 'cover_url', 'image_list'];
@@ -51,7 +52,7 @@ function getStatValue(row: Record<string, unknown>, fields: string[]): string | 
 }
 
 export default function DataCardView({
-  dataSource, isLoading, isError, error, platform, kind, page, pageSize, total, onPageChange, onPageSizeChange, onCardClick, onViewComments, onCrawlComments, crawlPending, onCrawlCreator, creatorCrawlPending,
+  dataSource, isLoading, isError, error, platform, kind, page, pageSize, total, onPageChange, onPageSizeChange, onCardClick, onViewComments, onCrawlComments, crawlPending, onCrawlCreator, creatorCrawlPending, listContext,
 }: Props) {
   const navigate = useNavigate();
   if (isLoading) {
@@ -176,6 +177,17 @@ export default function DataCardView({
                             onClick={(e) => {
                               e.stopPropagation();
                               sessionStorage.setItem('dataPageReturnUrl', window.location.pathname + window.location.search);
+                              // 存储列表上下文，供详情页上一条/下一条导航使用
+                              if (listContext) {
+                                sessionStorage.setItem('zhihu_list_ctx', JSON.stringify({
+                                  keyword: listContext.searchKeyword, task_id: listContext.filterTaskId,
+                                  order_by: listContext.orderBy, order_direction: listContext.orderDirection,
+                                  page: String(listContext.page),
+                                }));
+                                sessionStorage.setItem('zhihu_page_items', JSON.stringify(
+                                  dataSource.map((item) => item['content_id'])
+                                ));
+                              }
                               navigate(`/zhihu/${cid}`);
                             }}
                           >

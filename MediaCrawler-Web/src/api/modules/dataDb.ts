@@ -68,3 +68,32 @@ export interface TaskInfo {
 export function fetchAvailableTasks(platform: string, kind: string) {
   return httpGet<TaskInfo[]>(`/api/data/db/${platform}/${kind}/tasks`);
 }
+
+// ── 内容邻居（上一条/下一条）────────────────────────────────────────
+
+export interface ContentNeighbors {
+  platform: string;
+  kind: string;
+  current_content_id: string;
+  prev: Record<string, unknown> | null;
+  next: Record<string, unknown> | null;
+}
+
+export function fetchContentNeighbors(
+  platform: string,
+  params: {
+    content_id: string;
+    order_by?: string;
+    order_direction?: string;
+    keyword?: string;
+    task_id?: number;
+  },
+) {
+  const q = new URLSearchParams();
+  q.set('content_id', params.content_id);
+  if (params.order_by) q.set('order_by', params.order_by);
+  if (params.order_direction) q.set('order_direction', params.order_direction);
+  if (params.keyword) q.set('keyword', params.keyword);
+  if (params.task_id != null) q.set('task_id', String(params.task_id));
+  return httpGet<ContentNeighbors>(`/api/data/db/${platform}/contents/neighbors?${q.toString()}`);
+}

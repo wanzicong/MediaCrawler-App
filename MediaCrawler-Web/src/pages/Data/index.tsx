@@ -498,6 +498,14 @@ export default function DataPage() {
                   onClick={(e) => {
                     e.stopPropagation();
                     sessionStorage.setItem('dataPageReturnUrl', window.location.pathname + window.location.search);
+                    // 存储列表上下文，供详情页上一条/下一条导航使用
+                    sessionStorage.setItem('zhihu_list_ctx', JSON.stringify({
+                      keyword: searchKeyword, task_id: filterTaskId,
+                      order_by: orderBy, order_direction: orderDirection, page: String(page),
+                    }));
+                    sessionStorage.setItem('zhihu_page_items', JSON.stringify(
+                      (data?.items ?? []).map((item: Record<string, unknown>) => item['content_id'])
+                    ));
                     navigate(`/zhihu/${cid}`);
                   }}
                 >
@@ -727,6 +735,7 @@ export default function DataPage() {
             crawlPending={crawlCommentMutation.isPending}
             onCrawlCreator={handleCrawlCreator}
             creatorCrawlPending={crawlCreatorMutation.isPending}
+            listContext={{ searchKeyword, filterTaskId, orderBy, orderDirection, page }}
           />
         )}
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -7,8 +7,10 @@ import {
 import {
   ArrowLeftOutlined, ExportOutlined, LikeOutlined, CommentOutlined, ClockCircleOutlined,
   UserOutlined, RocketOutlined, RobotOutlined, PlusOutlined,
+  LeftOutlined, RightOutlined,
 } from '@ant-design/icons';
 import { fetchDbData } from '@/api';
+import { fetchContentNeighbors } from '@/api/modules/dataDb';
 import { startCrawler } from '@/api/modules/crawler';
 import { analyzeContent } from '@/api/modules/ai';
 import type { ContentAnalysisResponse } from '@/api/modules/ai';
@@ -124,6 +126,55 @@ export default function ZhihuDetailPage() {
     addKeywordsMut.mutate(remaining);
   };
 
+  // ── 上一条 / 下一条导航 ──────────────────────────────────────
+
+  // 从 sessionStorage 读取列表上下文
+  const pageItems: string[] = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem('zhihu_page_items');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }, []);
+
+  const listCtx = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem('zhihu_list_ctx');
+      return raw ? JSON.parse(raw) as { keyword: string; task_id: string | null; order_by: string; order_direction: string; page: string } : null;
+    } catch { return null; }
+  }, []);
+
+  // 在当前页 items 中的索引
+  const currentIdx = pageItems.indexOf(contentId!);
+  const hasCachedPrev = currentIdx > 0;
+  const hasCachedNext = currentIdx >= 0 && currentIdx < pageItems.length - 1;
+
+  // 跨页邻居查询
+  const { data: neighborsData, isFetching: neighborsLoading } = useQuery({
+    queryKey: ['zhihu-neighbors', contentId, listCtx],
+    queryFn: () => fetchContentNeighbors('zhihu', {
+      content_id: contentId!,
+      order_by: listCtx?.order_by || undefined,
+      order_direction: (listCtx?.order_direction as 'asc' | 'desc') || undefined,
+      keyword: listCtx?.keyword || undefined,
+      task_id: listCtx?.task_id ? Number(listCtx.task_id) : undefined,
+    }),
+    enabled: !!contentId,
+    staleTime: 0,
+  });
+
+  // 确定上一条 / 下一条的 content_id
+  const prevContentId = hasCachedPrev ? pageItems[currentIdx - 1] : (neighborsData?.prev?.content_id as string) || null;
+  const nextContentId = hasCachedNext ? pageItems[currentIdx + 1] : (neighborsData?.next?.content_id as string) || null;
+
+  // 判断是否在边界
+  const isFirst = !prevContentId && !neighborsLoading;
+  const isLast = !nextContentId && !neighborsLoading;
+
+  const navigateToItem = useCallback((targetContentId: string) => {
+    // 用 API 返回的邻居数据构建缓存窗口（相对于目标项），供后续导航使用
+    navigate(`/zhihu/${targetContentId}`);
+  }, [navigate]);
+
   if (isLoading) {
     return (
       <>
@@ -163,6 +214,28 @@ export default function ZhihuDetailPage() {
         description="内容阅读"
         extra={
           <Space>
+            <Button.Group>
+              <Tooltip title={isFirst ? '已是第一条' : '上一条'}>
+                <Button
+                  icon={<LeftOutlined />}
+                  disabled={isFirst}
+                  loading={!hasCachedPrev && neighborsLoading}
+                  onClick={() => prevContentId && navigateToItem(prevContentId)}
+                >
+                  上一条
+                </Button>
+              </Tooltip>
+              <Tooltip title={isLast ? '已是最后一条' : '下一条'}>
+                <Button
+                  icon={<RightOutlined />}
+                  disabled={isLast}
+                  loading={!hasCachedNext && neighborsLoading}
+                  onClick={() => nextContentId && navigateToItem(nextContentId)}
+                >
+                  下一条
+                </Button>
+              </Tooltip>
+            </Button.Group>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(returnPath)}>返回</Button>
             {data.content_url && (
               <Button

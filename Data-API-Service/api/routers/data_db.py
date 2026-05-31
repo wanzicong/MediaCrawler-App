@@ -71,6 +71,24 @@ async def query_comments_by_content(
         raise HTTPException(400, str(e))
 
 
+@router.get("/{platform}/contents/neighbors")
+async def get_content_neighbors(
+    platform: str,
+    content_id: str = Query(...),
+    order_by: Optional[str] = None,
+    order_direction: str = Query("desc", pattern="^(asc|desc)$"),
+    keyword: Optional[str] = None,
+    task_id: Optional[int] = None,
+):
+    """获取内容的上一条/下一条（在相同过滤和排序条件下）"""
+    try:
+        return await DataQueryService.get_content_neighbors(
+            platform, content_id, order_by, order_direction, keyword, task_id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.delete("/{platform}/{kind}/{record_id}")
 async def delete_data_record(
     platform: str,

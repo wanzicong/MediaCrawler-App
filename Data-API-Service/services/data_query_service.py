@@ -302,6 +302,119 @@ class DataQueryService:
         }
 
     @staticmethod
+    async def get_content_neighbors(
+        platform: str,
+        content_id: str,
+        order_by: Optional[str] = None,
+        order_direction: str = "desc",
+        keyword: Optional[str] = None,
+        task_id: Optional[int] = None,
+    ) -> dict:
+        """获取某内容在相同过滤+排序条件下的上一条/下一条"""
+        meta = PLATFORM_META.get(platform)
+        if not meta:
+            raise ValueError(f"不支持的平台: {platform}")
+        content_model = meta["kinds"]["contents"]["model"]
+        content_id_field = meta["content_id_field"]
+
+        _NUMERIC_SORT_FIELDS = {
+            "video_play_count", "video_comment", "video_danmaku", "video_favorite_count",
+            "video_share_count", "video_coin_count", "viewd_count", "comment_count",
+            "share_count", "collected_count", "liked_count", "disliked_count",
+            "like_count", "sub_comment_count", "total_fans", "total_liked",
+            "fans", "follows", "interaction", "voteup_count",
+        }
+
+        # 构建基础过滤条件
+        def _apply_filters(stmt):
+            if keyword:
+                pattern = f"%{keyword}%"
+                if hasattr(content_model, "title"):
+                    stmt = stmt.where(content_model.title.like(pattern))
+                elif hasattr(content_model, "content_text"):
+                    stmt = stmt.where(content_model.content_text.like(pattern))
+            if task_id is not None and hasattr(content_model, "task_id"):
+                stmt = stmt.where(content_model.task_id == task_id)
+            return stmt
+
+        async with get_mysql_session() as session:
+            # 获取当前项的 id 和排序字段值
+            cid_col = getattr(content_model, content_id_field)
+            current_stmt = select(content_model).where(cid_col == content_id)
+            current_row = (await session.execute(current_stmt)).scalar_one_or_none()
+            if not current_row:
+                raise ValueError(f"内容不存在: {content_id}")
+
+            current_pk = current_row.id
+
+            def _get_sort_col():
+                """返回排序表达式和当前值"""
+                if order_by and hasattr(content_model, order_by):
+                    col = getattr(content_model, order_by)
+                    if order_by in _NUMERIC_SORT_FIELDS:
+                        col = cast(col, Integer)
+                    return col, int(getattr(current_row, order_by) or 0)
+                return None, None
+
+            sort_col, current_sort_val = _get_sort_col()
+            is_desc = order_direction == "desc"
+
+            def _build_neighbor_query(direction: str):
+                """direction: 'prev' 或 'next'，构建 LIMIT 1 邻居查询"""
+                stmt = select(content_model)
+                stmt = _apply_filters(stmt)
+
+                if sort_col is not None:
+                    if is_desc:
+                        if direction == "prev":
+                            # 排在"前面"（排序值更大 或 排序值相等但 id 更大）
+                            stmt = stmt.where(
+                                (sort_col > current_sort_val)
+                                | ((sort_col == current_sort_val) & (content_model.id > current_pk))
+                            )
+                            stmt = stmt.order_by(sort_col.asc(), content_model.id.asc())
+                        else:  # next
+                            stmt = stmt.where(
+                                (sort_col < current_sort_val)
+                                | ((sort_col == current_sort_val) & (content_model.id < current_pk))
+                            )
+                            stmt = stmt.order_by(sort_col.desc(), content_model.id.desc())
+                    else:  # asc
+                        if direction == "prev":
+                            stmt = stmt.where(
+                                (sort_col < current_sort_val)
+                                | ((sort_col == current_sort_val) & (content_model.id > current_pk))
+                            )
+                            stmt = stmt.order_by(sort_col.desc(), content_model.id.asc())
+                        else:  # next
+                            stmt = stmt.where(
+                                (sort_col > current_sort_val)
+                                | ((sort_col == current_sort_val) & (content_model.id < current_pk))
+                            )
+                            stmt = stmt.order_by(sort_col.asc(), content_model.id.desc())
+                else:
+                    # 无排序字段，仅按 id desc
+                    if direction == "prev":
+                        stmt = stmt.where(content_model.id > current_pk)
+                        stmt = stmt.order_by(content_model.id.asc())
+                    else:  # next
+                        stmt = stmt.where(content_model.id < current_pk)
+                        stmt = stmt.order_by(content_model.id.desc())
+
+                return stmt.limit(1)
+
+            prev_row = (await session.execute(_build_neighbor_query("prev"))).scalar_one_or_none()
+            next_row = (await session.execute(_build_neighbor_query("next"))).scalar_one_or_none()
+
+        return {
+            "platform": platform,
+            "kind": "contents",
+            "current_content_id": content_id,
+            "prev": _row_to_dict(prev_row) if prev_row else None,
+            "next": _row_to_dict(next_row) if next_row else None,
+        }
+
+    @staticmethod
     async def delete_record(platform: str, kind: str, record_id: int) -> bool:
         meta = PLATFORM_META.get(platform)
         if not meta:
