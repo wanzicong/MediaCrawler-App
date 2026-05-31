@@ -153,7 +153,7 @@ class DataQueryService:
                 count_stmt = count_stmt.where(model.id.in_(subq))
                 list_stmt = list_stmt.where(model.id.in_(subq))
 
-            if content_id and kind == "contents":
+            if content_id:
                 cid_field = meta["content_id_field"]
                 if hasattr(model, cid_field):
                     col = getattr(model, cid_field)
@@ -255,6 +255,8 @@ class DataQueryService:
         content_id: str,
         page: int = 1,
         page_size: int = 20,
+        order_by: Optional[str] = None,
+        order_direction: str = "desc",
     ) -> dict:
         meta = PLATFORM_META.get(platform)
         if not meta:
@@ -265,13 +267,25 @@ class DataQueryService:
         page_size = min(max(1, page_size), 200)
         offset = (page - 1) * page_size
 
+        _NUMERIC_SORT_FIELDS = {
+            "like_count", "sub_comment_count", "dislike_count",
+        }
+
+        order_cols = []
+        if order_by and hasattr(comment_model, order_by):
+            col = getattr(comment_model, order_by)
+            if order_by in _NUMERIC_SORT_FIELDS:
+                col = cast(col, Integer)
+            order_cols.append(desc(col) if order_direction == "desc" else asc(col))
+        order_cols.append(comment_model.id.desc())
+
         async with get_mysql_session() as session:
             col = getattr(comment_model, content_id_field)
             count_stmt = select(func.count()).select_from(comment_model).where(col == content_id)
             list_stmt = (
                 select(comment_model)
                 .where(col == content_id)
-                .order_by(comment_model.id.desc())
+                .order_by(*order_cols)
                 .offset(offset)
                 .limit(page_size)
             )

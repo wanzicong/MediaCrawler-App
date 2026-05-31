@@ -155,6 +155,17 @@ export function runKeyword(keywordId: number) {
   return httpPost<{ status: string; keyword_id: number; task_id: number }>('/api/keywords/run', { keyword_id: keywordId });
 }
 
+export interface BatchRunResult {
+  status: string;
+  total_keywords: number;
+  platforms: string[];
+  tasks: { platform: string; task_id: number }[];
+}
+
+export function batchRunKeywords(ids: number[], profileId?: number) {
+  return httpPost<BatchRunResult>('/api/keywords/batch-run', { ids, profile_id: profileId });
+}
+
 export function autoClassifyKeyword(keywordId: number) {
   return httpPost<AutoClassifyResult>('/api/keywords/auto-classify', { keyword_id: keywordId });
 }

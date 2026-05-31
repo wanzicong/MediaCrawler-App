@@ -45,6 +45,7 @@ import {
   fissionKeywords,
   fetchKeywordStats,
   runKeyword,
+  batchRunKeywords,
   autoClassifyKeyword,
   batchAutoClassify,
   reclassifyAllKeywords,
@@ -56,6 +57,8 @@ import {
 import PageHeader from '@/components/PageHeader';
 import { PLATFORM_LABELS, KIND_LABELS } from '@/constants';
 import { fetchEnabledPlatforms } from '@/api/modules/platforms';
+import { fetchProfiles } from '@/api/modules/configMgmt';
+import type { CrawlerProfile } from '@/types/config';
 
 import styles from './index.module.less';
 
@@ -102,6 +105,10 @@ export default function KeywordsPage() {
   const [batchForm] = Form.useForm();
   const [groupForm] = Form.useForm();
 
+  // Batch run modal state
+  const [batchRunModalOpen, setBatchRunModalOpen] = useState(false);
+  const [batchRunProfileId, setBatchRunProfileId] = useState<number | undefined>();
+
   // ── Queries ────────────────────────────────────────────────────────
 
   const { data: groups, isLoading: groupsLoading } = useQuery({
@@ -132,6 +139,11 @@ export default function KeywordsPage() {
     queryKey: ['platforms', 'enabled'],
     queryFn: fetchEnabledPlatforms,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: profiles } = useQuery({
+    queryKey: ['profiles'],
+    queryFn: fetchProfiles,
   });
 
   const getPlatformName = useCallback(
@@ -250,6 +262,19 @@ export default function KeywordsPage() {
     mutationFn: (keywordId: number) => runKeyword(keywordId),
     onSuccess: (res) => {
       message.success(`爬虫任务已启动，任务ID: ${res.task_id}`);
+      void queryClient.invalidateQueries({ queryKey: ['keywords'] });
+      void queryClient.invalidateQueries({ queryKey: ['keyword-stats'] });
+    },
+  });
+
+  const batchRunKwMut = useMutation({
+    mutationFn: ({ ids, profileId }: { ids: number[]; profileId?: number }) =>
+      batchRunKeywords(ids, profileId),
+    onSuccess: (res) => {
+      const taskIds = res.tasks?.map((t: { task_id: number }) => t.task_id).join(', ') || 'N/A';
+      message.success(`批量爬虫已启动：${res.total_keywords} 个关键词，${res.platforms.length} 个平台，任务ID: ${taskIds}`);
+      setSelectedRowKeys([]);
+      setBatchRunModalOpen(false);
       void queryClient.invalidateQueries({ queryKey: ['keywords'] });
       void queryClient.invalidateQueries({ queryKey: ['keyword-stats'] });
     },
@@ -753,6 +778,17 @@ export default function KeywordsPage() {
             <span className={styles.selectedCount}>已选 {selectedRowKeys.length} 项</span>
             <Button
               size="small"
+              type="primary"
+              icon={<RocketOutlined />}
+              onClick={() => {
+                setBatchRunProfileId(profiles?.find((p) => p.is_default)?.id);
+                setBatchRunModalOpen(true);
+              }}
+            >
+              批量启动
+            </Button>
+            <Button
+              size="small"
               icon={<ThunderboltOutlined />}
               loading={batchAutoClassifyMut.isPending}
               onClick={() => {
@@ -1223,6 +1259,44 @@ export default function KeywordsPage() {
             <Select options={platformOptions} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Batch Run Modal */}
+      <Modal
+        title="批量启动爬虫"
+        open={batchRunModalOpen}
+        onCancel={() => {
+          setBatchRunModalOpen(false);
+        }}
+        onOk={() => {
+          batchRunKwMut.mutate({ ids: selectedRowKeys, profileId: batchRunProfileId });
+        }}
+        confirmLoading={batchRunKwMut.isPending}
+        okText="启动"
+        cancelText="取消"
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <div>
+            <Text strong>已选择 {selectedRowKeys.length} 个关键词</Text>
+          </div>
+          <div>
+            <Text type="secondary">配置方案</Text>
+            <Select
+              style={{ width: '100%', marginTop: 4 }}
+              placeholder="选择配置方案（可选）"
+              allowClear
+              value={batchRunProfileId}
+              onChange={(val) => setBatchRunProfileId(val)}
+              options={(profiles ?? []).map((p: CrawlerProfile) => ({
+                value: p.id,
+                label: `${p.name}${p.is_default ? '（默认）' : ''}`,
+              }))}
+            />
+            <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
+              选择方案后将使用方案中的配置（平台、登录方式、抓取数量等）启动爬虫
+            </Text>
+          </div>
+        </Space>
       </Modal>
     </div>
   );

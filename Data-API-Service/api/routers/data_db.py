@@ -57,12 +57,16 @@ async def query_comments_by_content(
     content_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
+    order_by: Optional[str] = None,
+    order_direction: str = Query("desc", pattern="^(asc|desc)$"),
 ):
     """按内容 ID 查询该内容下的评论"""
     if kind != "comments":
         raise HTTPException(400, "kind 必须为 'comments'，此端点仅用于查询评论")
     try:
-        return await DataQueryService.query_comments_by_content(platform, content_id, page, page_size)
+        return await DataQueryService.query_comments_by_content(
+            platform, content_id, page, page_size, order_by, order_direction,
+        )
     except ValueError as e:
         raise HTTPException(400, str(e))
 

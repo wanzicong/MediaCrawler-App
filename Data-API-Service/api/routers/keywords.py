@@ -1346,6 +1346,7 @@ class KeywordRunRequest(BaseModel):
 class KeywordBatchRunRequest(BaseModel):
     ids: list[int] = Field(..., min_length=1)
     mode: Optional[str] = "batch"
+    profile_id: Optional[int] = None
 
 
 class StatusSyncRequest(BaseModel):
@@ -1398,7 +1399,8 @@ async def keyword_run(body: KeywordRunRequest):
 
 @router.post("/batch-run")
 async def keywords_batch_run(body: KeywordBatchRunRequest):
-    """批量爬取: 选中关键词 → 创建任务管道"""
+    """批量爬取: 选中关键词 → 创建爬虫任务
+    支持 profile_id 选择配置方案，按方案配置启动爬虫"""
     async with get_mysql_session() as session:
         result = await session.execute(
             select(Keyword).where(Keyword.id.in_(body.ids))
@@ -1413,23 +1415,30 @@ async def keywords_batch_run(body: KeywordBatchRunRequest):
         for kw in keywords:
             platform_keywords.setdefault(kw.platform, []).append(kw.keyword)
 
-        # 为每个平台创建一个管道
-        pipelines = []
+        # 为每个平台创建爬虫任务
+        tasks = []
         for platform, kw_list in platform_keywords.items():
             try:
+                request_json = {
+                    "platform": platform,
+                    "keywords": ",".join(kw_list),
+                    "crawler_type": "search",
+                    "save_option": "db",
+                }
+                if body.profile_id:
+                    request_json["profile_id"] = body.profile_id
+
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     resp = await client.post(
-                        f"{CRAWLER_SERVICE_URL}/api/crawler-pro/pipelines",
-                        json={
-                            "name": f"批量任务_{datetime.now().strftime('%m%d_%H%M')}",
-                            "platform": platform,
-                            "keywords": kw_list,
-                            "mode": body.mode or "batch",
-                            "config": {"crawler_type": "search", "save_option": "db"},
-                        },
+                        f"{CRAWLER_SERVICE_URL}/api/crawler/start",
+                        json=request_json,
                     )
                     if resp.status_code == 200:
-                        pipelines.append(resp.json())
+                        result_data = resp.json()
+                        tasks.append({
+                            "platform": platform,
+                            "task_id": result_data.get("task_id"),
+                        })
             except Exception:
                 pass
 
@@ -1444,7 +1453,7 @@ async def keywords_batch_run(body: KeywordBatchRunRequest):
             "status": "ok",
             "total_keywords": len(keywords),
             "platforms": list(platform_keywords.keys()),
-            "pipelines": pipelines,
+            "tasks": tasks,
         }
 
 

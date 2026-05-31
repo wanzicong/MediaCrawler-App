@@ -88,6 +88,7 @@ export default function DataPage() {
   });
   const [commentModalCid, setCommentModalCid] = useState<string | null>(null);
   const [commentModalPage, setCommentModalPage] = useState(1);
+  const [commentModalPageSize, setCommentModalPageSize] = useState(20);
   const [isCommentFullscreen, setIsCommentFullscreen] = useState(false);
   const [orderBy, setOrderBy] = useState('');
   const [orderDirection, setOrderDirection] = useState('desc');
@@ -193,8 +194,8 @@ export default function DataPage() {
 
   // 评论弹窗数据
   const { data: commentModalData, isLoading: commentModalLoading } = useQuery({
-    queryKey: ['content-comments', platform, commentModalCid, commentModalPage],
-    queryFn: () => fetchContentComments(platform, commentModalCid!, { page: commentModalPage, page_size: 20 }),
+    queryKey: ['content-comments', platform, commentModalCid, commentModalPage, commentModalPageSize],
+    queryFn: () => fetchContentComments(platform, commentModalCid!, { page: commentModalPage, page_size: commentModalPageSize }),
     enabled: !!commentModalCid,
     placeholderData: keepPreviousData,
   });
@@ -411,6 +412,7 @@ export default function DataPage() {
                     e.stopPropagation();
                     setCommentModalCid(cid);
                     setCommentModalPage(1);
+                    setCommentModalPageSize(20);
                   }}
                 >
                   评论
@@ -680,6 +682,7 @@ export default function DataPage() {
             onViewComments={(cid) => {
               setCommentModalCid(cid);
               setCommentModalPage(1);
+              setCommentModalPageSize(20);
             }}
             onCrawlComments={handleCrawlComments}
             crawlPending={crawlCommentMutation.isPending}
@@ -756,9 +759,15 @@ export default function DataPage() {
             ]}
             pagination={{
               current: commentModalPage,
-              pageSize: 20,
+              pageSize: commentModalPageSize,
               total: commentModalData?.total ?? 0,
-              onChange: setCommentModalPage,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50', '100', '200'],
+              onChange: (p) => setCommentModalPage(p),
+              onShowSizeChange: (_current, size) => {
+                setCommentModalPageSize(size);
+                setCommentModalPage(1);
+              },
               showTotal: (t) => `共 ${t} 条`,
             }}
             size="small"
