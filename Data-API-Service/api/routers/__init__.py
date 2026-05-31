@@ -23,10 +23,12 @@ from .data_db import router as data_db_router
 from .internal import router as internal_router
 from .keywords import router as keywords_router
 from .platforms import router as platforms_router
+from .bookmarks import router as bookmarks_router
 from .system import router as system_router
 
 __all__ = [
     "ai_router",
+    "bookmarks_router",
     "config_mgmt_router",
     "data_router",
     "data_db_router",

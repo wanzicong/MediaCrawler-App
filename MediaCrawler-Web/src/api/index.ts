@@ -6,6 +6,7 @@ export * from './modules/crawler';
 export * from './modules/data';
 export * from './modules/dataDb';
 export * from './modules/ai';
+export * from './modules/bookmarks';
 export * from './modules/keywords';
 export * from './modules/platforms';
 export * from './modules/pro';

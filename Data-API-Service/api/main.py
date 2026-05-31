@@ -29,6 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import (
     ai_router,
+    bookmarks_router,
     config_mgmt_router,
     data_db_router,
     data_router,
@@ -86,6 +87,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(ai_router, prefix="/api")
+app.include_router(bookmarks_router, prefix="/api")
 app.include_router(config_mgmt_router, prefix="/api")
 app.include_router(data_db_router, prefix="/api")
 app.include_router(data_router, prefix="/api")

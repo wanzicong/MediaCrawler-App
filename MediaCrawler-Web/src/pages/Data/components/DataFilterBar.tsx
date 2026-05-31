@@ -40,6 +40,10 @@ interface Props {
   onOrderByChange?: (v: string) => void;
   onOrderDirectionChange?: (v: string) => void;
   onTaskIdChange: (v: string | null) => void;
+  bookmarkFilter?: string;
+  onBookmarkFilterChange?: (v: string) => void;
+  reviewStatusFilter?: string;
+  onReviewStatusFilterChange?: (v: string) => void;
 }
 
 export default function DataFilterBar({
@@ -64,6 +68,10 @@ export default function DataFilterBar({
   onOrderByChange,
   onOrderDirectionChange,
   onTaskIdChange,
+  bookmarkFilter,
+  onBookmarkFilterChange,
+  reviewStatusFilter,
+  onReviewStatusFilterChange,
 }: Props) {
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
   const prevKeywordRef = useRef(keyword);
@@ -119,6 +127,30 @@ export default function DataFilterBar({
         }))}
         notFoundContent={tasksLoading ? '加载中...' : '当前数据无关联任务'}
       />
+      {onBookmarkFilterChange && (
+        <Select
+          style={{ width: 100 }}
+          value={bookmarkFilter || undefined}
+          placeholder="收藏"
+          allowClear
+          onChange={(v) => onBookmarkFilterChange(v ?? '')}
+          options={[{ value: 'bookmarked', label: '⭐ 已收藏' }]}
+        />
+      )}
+      {onReviewStatusFilterChange && (
+        <Select
+          style={{ width: 120 }}
+          value={reviewStatusFilter || undefined}
+          placeholder="审阅状态"
+          allowClear
+          onChange={(v) => onReviewStatusFilterChange(v ?? '')}
+          options={[
+            { value: 'reviewed', label: '✅ 已审阅' },
+            { value: 'pending', label: '📋 待处理' },
+            { value: 'ignored', label: '🚫 已忽略' },
+          ]}
+        />
+      )}
       <Input.Search
         placeholder="标题关键词（实时搜索）"
         allowClear

@@ -7,12 +7,13 @@ import {
 import {
   ArrowLeftOutlined, ExportOutlined, LikeOutlined, CommentOutlined, ClockCircleOutlined,
   UserOutlined, RocketOutlined, RobotOutlined, PlusOutlined, CheckOutlined,
-  LeftOutlined, RightOutlined, PushpinOutlined,
+  LeftOutlined, RightOutlined, PushpinOutlined, StarOutlined, StarFilled,
 } from '@ant-design/icons';
 import { fetchDbData } from '@/api';
 import { fetchContentNeighbors } from '@/api/modules/dataDb';
 import { startCrawler } from '@/api/modules/crawler';
 import { analyzeContent } from '@/api/modules/ai';
+import { toggleBookmark, checkBookmark } from '@/api/modules/bookmarks';
 import type { ContentAnalysisResponse } from '@/api/modules/ai';
 import { batchCreateKeywords } from '@/api/modules/keywords';
 import PageHeader from '@/components/PageHeader';
@@ -194,6 +195,29 @@ export default function ZhihuDetailPage() {
     navigate(`/zhihu/${targetContentId}`);
   }, [navigate]);
 
+  // ── 收藏切换 ────────────────────────────────────────────────
+  const [isBookmarked, setIsBookmarked] = useState(false);
+
+  const { refetch: checkBookmarkStatus } = useQuery({
+    queryKey: ['bookmark-check', 'zhihu', contentId],
+    queryFn: () => checkBookmark('zhihu', contentId!),
+    enabled: false,
+  });
+
+  useEffect(() => {
+    if (contentId) {
+      checkBookmark('zhihu', contentId).then((res) => setIsBookmarked(res.is_bookmarked));
+    }
+  }, [contentId]);
+
+  const toggleBookmarkMut = useMutation({
+    mutationFn: () => toggleBookmark('zhihu', contentId!),
+    onSuccess: (res) => {
+      setIsBookmarked(res.is_bookmarked);
+      message.success(res.is_bookmarked ? '已收藏' : '已取消收藏');
+    },
+  });
+
   // ── 文本选中添加关键词 ──────────────────────────────────────
   const contentRef = useRef<HTMLDivElement>(null);
   const [selectionPopup, setSelectionPopup] = useState<{
@@ -319,6 +343,13 @@ export default function ZhihuDetailPage() {
                 {progressText}
               </Tag>
             )}
+            <Tooltip title={isBookmarked ? '取消收藏' : '收藏'}>
+              <Button
+                icon={isBookmarked ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
+                loading={toggleBookmarkMut.isPending}
+                onClick={() => toggleBookmarkMut.mutate()}
+              />
+            </Tooltip>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(returnPath)}>返回</Button>
             {data.content_url && (
               <Button

@@ -24,6 +24,9 @@ interface Props {
   onCrawlCreator?: (row: Record<string, unknown>) => void;
   creatorCrawlPending?: boolean;
   listContext?: { searchKeyword: string; filterTaskId: string | null; orderBy: string; orderDirection: string; page: number; pageSize: number; total: number };
+  bookmarkMap?: Record<string, { is_bookmarked: boolean; review_status: string | null }>;
+  onToggleBookmark?: (cid: string) => void;
+  contentIdField?: string;
 }
 
 const COVER_FIELDS = ['video_cover_url', 'cover_url', 'image_list'];
@@ -52,7 +55,7 @@ function getStatValue(row: Record<string, unknown>, fields: string[]): string | 
 }
 
 export default function DataCardView({
-  dataSource, isLoading, isError, error, platform, kind, page, pageSize, total, onPageChange, onPageSizeChange, onCardClick, onViewComments, onCrawlComments, crawlPending, onCrawlCreator, creatorCrawlPending, listContext,
+  dataSource, isLoading, isError, error, platform, kind, page, pageSize, total, onPageChange, onPageSizeChange, onCardClick, onViewComments, onCrawlComments, crawlPending, onCrawlCreator, creatorCrawlPending, listContext, bookmarkMap, onToggleBookmark, contentIdField,
 }: Props) {
   const navigate = useNavigate();
   if (isLoading) {
@@ -83,8 +86,9 @@ export default function DataCardView({
           const avatarUrl = getFieldValue(row, AVATAR_FIELDS);
           const title = getFieldValue(row, TITLE_FIELDS) || '无标题';
           const nickname = String(row['nickname'] ?? row['user_nickname'] ?? '');
-          const contentIdField = CONTENT_ID_FIELDS[platform] || 'note_id';
-          const cid = row[contentIdField] as string | undefined;
+          const cidField = contentIdField || CONTENT_ID_FIELDS[platform] || 'note_id';
+          const cid = row[cidField] as string | undefined;
+          const bm = cid && bookmarkMap ? bookmarkMap[cid] : null;
 
           return (
             <Col key={String(row.id ?? idx)} xs={24} sm={12} md={8} lg={6}>
@@ -155,6 +159,15 @@ export default function DataCardView({
                 </div>
 
                 <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 2, rowGap: 2 }}>
+                  {onToggleBookmark && cid && (
+                    <Button
+                      type="link"
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); onToggleBookmark(cid); }}
+                    >
+                      {bm?.is_bookmarked ? '⭐' : '☆'}
+                    </Button>
+                  )}
                   {kind === 'contents' && cid && (
                     <>
                       <Button

@@ -148,3 +148,17 @@ class CrawlerTaskLog(Base):
     message = Column(Text, nullable=False, comment="日志内容")
     recorded_at = Column(String(32), nullable=False, comment="日志时间 HH:MM:SS")
     created_at = Column(DateTime, default=datetime.utcnow, comment="写入时间")
+
+
+class ContentBookmark(Base):
+    """内容收藏 & 审阅状态"""
+
+    __tablename__ = "content_bookmark"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    platform = Column(String(32), nullable=False, comment="平台代码")
+    content_id = Column(String(128), nullable=False, comment="内容ID（平台唯一标识）")
+    is_bookmarked = Column(Boolean, default=True, nullable=False, comment="是否收藏")
+    review_status = Column(String(32), nullable=True, comment="审阅状态: reviewed/pending/ignored")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

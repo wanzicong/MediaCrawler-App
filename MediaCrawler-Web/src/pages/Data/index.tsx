@@ -25,6 +25,8 @@ import {
   fetchAvailableTasks,
 } from '@/api';
 import { analyzeComments, batchAnalyze, type AnalyzeResponse, type BatchAnalyzeResponse } from '@/api/modules/ai';
+import { batchCheckBookmarks, toggleBookmark as toggleBookmarkApi } from '@/api/modules/bookmarks';
+import type { BookmarkInfo } from '@/api/modules/bookmarks';
 import { startCrawler } from '@/api/modules/crawler';
 import { commentAsync } from '@/api/modules/comments';
 import PageHeader from '@/components/PageHeader';
@@ -65,6 +67,8 @@ export default function DataPage() {
   const orderBy = searchParams.get('order_by') || '';
   const orderDirection = searchParams.get('order_dir') || 'desc';
   const viewMode: 'table' | 'card' = (searchParams.get('view') as 'table' | 'card') || 'card';
+  const bookmarkFilter = searchParams.get('bookmark') || '';
+  const reviewStatusFilter = searchParams.get('review_status') || '';
 
   const [keyword, setKeyword] = useState('');
   const [detailRow, setDetailRow] = useState<Record<string, unknown> | null>(null);
@@ -136,6 +140,16 @@ export default function DataPage() {
   const setViewMode = useCallback((v: 'table' | 'card') => {
     updateParams({ view: v !== 'card' ? v : null });
   }, [updateParams]);
+
+  const setBookmarkFilter = useCallback((v: string) => {
+    updateParams({ bookmark: v || null, page: null });
+  }, [updateParams]);
+
+  const setReviewStatusFilter = useCallback((v: string) => {
+    updateParams({ review_status: v || null, page: null });
+  }, [updateParams]);
+
+  const contentIdField = useMemo(() => CONTENT_ID_FIELDS[platform] || 'note_id', [platform]);
 
   const batchAnalyzeMutation = useMutation({
     mutationFn: () => batchAnalyze({
@@ -278,6 +292,58 @@ export default function DataPage() {
     enabled: !!platform,
   });
 
+  // ── 收藏/取消收藏 ──────────────────────────────────────────
+  const [bookmarkMap, setBookmarkMap] = useState<Record<string, BookmarkInfo>>({});
+
+  const toggleBookmarkMut = useMutation({
+    mutationFn: (cid: string) => toggleBookmarkApi(platform, cid),
+    onSuccess: (res, cid) => {
+      setBookmarkMap((prev) => ({
+        ...prev,
+        [cid]: { is_bookmarked: res.is_bookmarked, review_status: prev[cid]?.review_status || null },
+      }));
+      message.success(res.is_bookmarked ? '已收藏' : '已取消收藏');
+    },
+  });
+
+  // 批量查询当前页内容的收藏状态
+  const { data: batchBookmarkData } = useQuery({
+    queryKey: ['batch-bookmarks', platform, data?.items],
+    queryFn: async () => {
+      if (!platform || !data?.items?.length) return {};
+      const cids = data.items
+        .map((item: Record<string, unknown>) => String(item[contentIdField] || ''))
+        .filter(Boolean);
+      if (!cids.length) return {};
+      const res = await batchCheckBookmarks(platform, cids);
+      return res.items;
+    },
+    enabled: !!platform && !!data?.items?.length,
+    staleTime: 5_000,
+  });
+
+  useEffect(() => {
+    if (batchBookmarkData) setBookmarkMap(batchBookmarkData);
+  }, [batchBookmarkData]);
+
+  // ── 客户端过滤（收藏 & 审阅状态）───────────────────────────
+  const filteredItems = useMemo(() => {
+    let items = data?.items ?? [];
+    if (bookmarkFilter === 'bookmarked') {
+      items = items.filter((item: Record<string, unknown>) => {
+        const cid = String(item[contentIdField] || '');
+        return bookmarkMap[cid]?.is_bookmarked;
+      });
+    }
+    if (reviewStatusFilter) {
+      items = items.filter((item: Record<string, unknown>) => {
+        const cid = String(item[contentIdField] || '');
+        return bookmarkMap[cid]?.review_status === reviewStatusFilter;
+      });
+    }
+    return items;
+  }, [data?.items, bookmarkFilter, reviewStatusFilter, bookmarkMap, contentIdField]);
+
   const deleteMutation = useMutation({
     mutationFn: (recordId: number) => deleteDataRecord(platform, kind, recordId),
     onSuccess: () => {
@@ -362,8 +428,6 @@ export default function DataPage() {
     return IMPORTANT_FIELDS[key] ?? [];
   }, [platform, kind]);
 
-  const contentIdField = useMemo(() => CONTENT_ID_FIELDS[platform] || 'note_id', [platform]);
-
   const columns: ColumnsType<Record<string, unknown>> = useMemo(() => {
     const dataCols = importantFields.map((field) => ({
       title: FIELD_LABELS[field] || field,
@@ -421,6 +485,26 @@ export default function DataPage() {
         return formatText(field, v);
       },
     }));
+
+    const starCol = {
+      title: '',
+      key: 'bookmark',
+      width: 36,
+      fixed: 'left' as const,
+      render: (_: unknown, r: Record<string, unknown>) => {
+        const cid = r[contentIdField] as string;
+        if (!cid) return null;
+        const bm = bookmarkMap[cid];
+        return (
+          <span
+            style={{ cursor: 'pointer', fontSize: 16, userSelect: 'none' }}
+            onClick={(e) => { e.stopPropagation(); toggleBookmarkMut.mutate(cid); }}
+          >
+            {bm?.is_bookmarked ? '⭐' : '☆'}
+          </span>
+        );
+      },
+    };
 
     const actionCol = {
       title: '操作',
@@ -548,8 +632,8 @@ export default function DataPage() {
       },
     };
 
-    return [...dataCols, actionCol];
-  }, [importantFields, platform, kind, contentIdField, deleteMutation, crawlCreatorMutation, handleCrawlCreator, modal, analyzingContentId, analysisLoading, handleAnalyzeComments, navigate]);
+    return [starCol, ...dataCols, actionCol];
+  }, [importantFields, platform, kind, contentIdField, deleteMutation, crawlCreatorMutation, handleCrawlCreator, modal, analyzingContentId, analysisLoading, handleAnalyzeComments, navigate, bookmarkMap, toggleBookmarkMut]);
 
   const allFields = useMemo(() => {
     if (!detailRow) return [];
@@ -641,7 +725,7 @@ export default function DataPage() {
           kinds={kinds}
           keyword={keyword}
           dataTotal={data?.total}
-          hasFilters={!!(filterTaskId || filterContentId || searchKeyword)}
+          hasFilters={!!(filterTaskId || filterContentId || searchKeyword || bookmarkFilter || reviewStatusFilter)}
           sortOptions={[...videoSortOptions, ...creatorSortOptions]}
           orderBy={orderBy}
           orderDirection={orderDirection}
@@ -656,6 +740,10 @@ export default function DataPage() {
           onOrderByChange={setOrderBy}
           onOrderDirectionChange={setOrderDirection}
           onTaskIdChange={handleTaskIdChange}
+          bookmarkFilter={bookmarkFilter}
+          onBookmarkFilterChange={setBookmarkFilter}
+          reviewStatusFilter={reviewStatusFilter}
+          onReviewStatusFilterChange={setReviewStatusFilter}
         />
 
         <DataFilterAlerts
@@ -702,7 +790,7 @@ export default function DataPage() {
         {viewMode === 'table' ? (
           <DataTable
             columns={columns}
-            dataSource={data?.items ?? []}
+            dataSource={filteredItems}
             isLoading={isLoading}
             isError={isError}
             error={error as Error | null}
@@ -715,7 +803,7 @@ export default function DataPage() {
           />
         ) : (
           <DataCardView
-            dataSource={data?.items ?? []}
+            dataSource={filteredItems}
             isLoading={isLoading}
             isError={isError}
             error={error as Error | null}
@@ -737,6 +825,9 @@ export default function DataPage() {
             onCrawlCreator={handleCrawlCreator}
             creatorCrawlPending={crawlCreatorMutation.isPending}
             listContext={{ searchKeyword, filterTaskId, orderBy, orderDirection, page, pageSize, total: data?.total ?? 0 }}
+            bookmarkMap={bookmarkMap}
+            onToggleBookmark={(cid) => toggleBookmarkMut.mutate(cid)}
+            contentIdField={contentIdField}
           />
         )}
 
