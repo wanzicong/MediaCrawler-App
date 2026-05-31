@@ -501,7 +501,8 @@ export default function DataPage() {
                     // 存储列表上下文，供详情页上一条/下一条导航使用
                     sessionStorage.setItem('zhihu_list_ctx', JSON.stringify({
                       keyword: searchKeyword, task_id: filterTaskId,
-                      order_by: orderBy, order_direction: orderDirection, page: String(page),
+                      order_by: orderBy, order_direction: orderDirection,
+                      page: String(page), page_size: pageSize, total: data?.total ?? 0,
                     }));
                     sessionStorage.setItem('zhihu_page_items', JSON.stringify(
                       (data?.items ?? []).map((item: Record<string, unknown>) => item['content_id'])
@@ -735,7 +736,7 @@ export default function DataPage() {
             crawlPending={crawlCommentMutation.isPending}
             onCrawlCreator={handleCrawlCreator}
             creatorCrawlPending={crawlCreatorMutation.isPending}
-            listContext={{ searchKeyword, filterTaskId, orderBy, orderDirection, page }}
+            listContext={{ searchKeyword, filterTaskId, orderBy, orderDirection, page, pageSize, total: data?.total ?? 0 }}
           />
         )}
 

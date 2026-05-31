@@ -23,7 +23,7 @@ interface Props {
   crawlPending?: boolean;
   onCrawlCreator?: (row: Record<string, unknown>) => void;
   creatorCrawlPending?: boolean;
-  listContext?: { searchKeyword: string; filterTaskId: string | null; orderBy: string; orderDirection: string; page: number };
+  listContext?: { searchKeyword: string; filterTaskId: string | null; orderBy: string; orderDirection: string; page: number; pageSize: number; total: number };
 }
 
 const COVER_FIELDS = ['video_cover_url', 'cover_url', 'image_list'];
@@ -182,7 +182,7 @@ export default function DataCardView({
                                 sessionStorage.setItem('zhihu_list_ctx', JSON.stringify({
                                   keyword: listContext.searchKeyword, task_id: listContext.filterTaskId,
                                   order_by: listContext.orderBy, order_direction: listContext.orderDirection,
-                                  page: String(listContext.page),
+                                  page: String(listContext.page), page_size: listContext.pageSize, total: listContext.total,
                                 }));
                                 sessionStorage.setItem('zhihu_page_items', JSON.stringify(
                                   dataSource.map((item) => item['content_id'])

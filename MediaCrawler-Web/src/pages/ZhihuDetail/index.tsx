@@ -138,7 +138,10 @@ export default function ZhihuDetailPage() {
   const listCtx = useMemo(() => {
     try {
       const raw = sessionStorage.getItem('zhihu_list_ctx');
-      return raw ? JSON.parse(raw) as { keyword: string; task_id: string | null; order_by: string; order_direction: string; page: string } : null;
+      return raw ? JSON.parse(raw) as {
+        keyword: string; task_id: string | null; order_by: string; order_direction: string;
+        page: string; page_size: number; total: number;
+      } : null;
     } catch { return null; }
   }, []);
 
@@ -146,6 +149,23 @@ export default function ZhihuDetailPage() {
   const currentIdx = pageItems.indexOf(contentId!);
   const hasCachedPrev = currentIdx > 0;
   const hasCachedNext = currentIdx >= 0 && currentIdx < pageItems.length - 1;
+
+  // ── 计算当前阅读进度位置 ────────────────────────────────────
+  const progressInfo = useMemo(() => {
+    if (!listCtx) return null;
+    const ctxPage = Number(listCtx.page) || 1;
+    const ctxPageSize = listCtx.page_size || 20;
+    const ctxTotal = listCtx.total || 0;
+    const totalPages = Math.max(1, Math.ceil(ctxTotal / ctxPageSize));
+    if (currentIdx >= 0) {
+      const globalIdx = (ctxPage - 1) * ctxPageSize + currentIdx + 1;
+      return { globalIdx, total: ctxTotal, page: ctxPage, totalPages };
+    }
+    return {
+      globalIdx: (ctxPage - 1) * ctxPageSize + 1,
+      total: ctxTotal, page: ctxPage, totalPages,
+    };
+  }, [listCtx, currentIdx]);
 
   // 跨页邻居查询
   const { data: neighborsData, isFetching: neighborsLoading } = useQuery({
@@ -293,6 +313,11 @@ export default function ZhihuDetailPage() {
                 </Button>
               </Tooltip>
             </Button.Group>
+            {progressInfo && (
+              <Tag color="blue" style={{ fontSize: 12, margin: 0, lineHeight: '22px' }}>
+                第 {progressInfo.globalIdx}/{progressInfo.total} 条 · 第 {progressInfo.page}/{progressInfo.totalPages} 页
+              </Tag>
+            )}
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(returnPath)}>返回</Button>
             {data.content_url && (
               <Button
