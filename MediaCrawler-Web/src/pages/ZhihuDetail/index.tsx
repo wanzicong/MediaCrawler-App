@@ -152,10 +152,10 @@ export default function ZhihuDetailPage() {
 
   // ── 计算当前阅读进度位置 ────────────────────────────────────
   const progressInfo = useMemo(() => {
-    if (!listCtx) return null;
+    if (!listCtx || !listCtx.total) return null; // total 为 0 时视为无可用进度数据
     const ctxPage = Number(listCtx.page) || 1;
     const ctxPageSize = listCtx.page_size || 20;
-    const ctxTotal = listCtx.total || 0;
+    const ctxTotal = listCtx.total;
     const totalPages = Math.max(1, Math.ceil(ctxTotal / ctxPageSize));
     if (currentIdx >= 0) {
       const globalIdx = (ctxPage - 1) * ctxPageSize + currentIdx + 1;
