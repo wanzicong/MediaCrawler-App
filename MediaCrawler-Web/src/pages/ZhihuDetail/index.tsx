@@ -151,20 +151,21 @@ export default function ZhihuDetailPage() {
   const hasCachedNext = currentIdx >= 0 && currentIdx < pageItems.length - 1;
 
   // ── 计算当前阅读进度位置 ────────────────────────────────────
-  const progressInfo = useMemo(() => {
-    if (!listCtx || !listCtx.total) return null; // total 为 0 时视为无可用进度数据
+  const progressText = useMemo(() => {
+    if (!listCtx) return null;
     const ctxPage = Number(listCtx.page) || 1;
     const ctxPageSize = listCtx.page_size || 20;
     const ctxTotal = listCtx.total;
-    const totalPages = Math.max(1, Math.ceil(ctxTotal / ctxPageSize));
-    if (currentIdx >= 0) {
-      const globalIdx = (ctxPage - 1) * ctxPageSize + currentIdx + 1;
-      return { globalIdx, total: ctxTotal, page: ctxPage, totalPages };
+    if (ctxTotal) {
+      const totalPages = Math.max(1, Math.ceil(ctxTotal / ctxPageSize));
+      if (currentIdx >= 0) {
+        const globalIdx = (ctxPage - 1) * ctxPageSize + currentIdx + 1;
+        return `第 ${globalIdx}/${ctxTotal} 条 · 第 ${ctxPage}/${totalPages} 页`;
+      }
+      return `第 ${ctxPage}/${totalPages} 页`;
     }
-    return {
-      globalIdx: (ctxPage - 1) * ctxPageSize + 1,
-      total: ctxTotal, page: ctxPage, totalPages,
-    };
+    // 无 total 数据时，至少显示页码
+    return `第 ${ctxPage} 页`;
   }, [listCtx, currentIdx]);
 
   // 跨页邻居查询
@@ -313,9 +314,9 @@ export default function ZhihuDetailPage() {
                 </Button>
               </Tooltip>
             </Button.Group>
-            {progressInfo && (
+            {progressText && (
               <Tag color="blue" style={{ fontSize: 12, margin: 0, lineHeight: '22px' }}>
-                第 {progressInfo.globalIdx}/{progressInfo.total} 条 · 第 {progressInfo.page}/{progressInfo.totalPages} 页
+                {progressText}
               </Tag>
             )}
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(returnPath)}>返回</Button>
