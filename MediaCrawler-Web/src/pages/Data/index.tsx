@@ -54,23 +54,89 @@ export default function DataPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const urlTaskId = searchParams.get('task_id');
-  const urlPlatform = searchParams.get('platform'); // URL 参数或 null
+  // ── 从 URL search params 读取所有过滤/分页状态（URL 是唯一数据源）─────────
+  const platform = searchParams.get('platform') || '';
+  const kind = searchParams.get('kind') || 'contents';
+  const page = Number(searchParams.get('page')) || 1;
+  const pageSize = Number(searchParams.get('page_size')) || 20;
+  const searchKeyword = searchParams.get('keyword') || '';
+  const filterTaskId = searchParams.get('task_id') || null;
+  const filterContentId = searchParams.get('content_id') || null;
+  const orderBy = searchParams.get('order_by') || '';
+  const orderDirection = searchParams.get('order_dir') || 'desc';
+  const viewMode: 'table' | 'card' = (searchParams.get('view') as 'table' | 'card') || 'card';
 
-  const [platform, setPlatform] = useState(urlPlatform || '');
-  const [kind, setKind] = useState('contents');
-  const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
-  const [searchKeyword, setSearchKeyword] = useState('');
   const [detailRow, setDetailRow] = useState<Record<string, unknown> | null>(null);
-  const [filterContentId, setFilterContentId] = useState<string | null>(null);
-  const [filterTaskId, setFilterTaskId] = useState<string | null>(urlTaskId);
   const [analyzingContentId, setAnalyzingContentId] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
-  // 批量分析
   const [batchAnalysisResult, setBatchAnalysisResult] = useState<BatchAnalyzeResponse | null>(null);
+
+  const [commentModalCid, setCommentModalCid] = useState<string | null>(null);
+  const [commentModalPage, setCommentModalPage] = useState(1);
+  const [commentModalPageSize, setCommentModalPageSize] = useState(20);
+  const [isCommentFullscreen, setIsCommentFullscreen] = useState(false);
+
+  // ── 更新 URL 参数（使用原生 API 确保浏览器历史在 navigate(-1) 时正确恢复）─
+  const updateParams = useCallback((patch: Record<string, string | null>) => {
+    const next = new URLSearchParams(window.location.search);
+    for (const [k, v] of Object.entries(patch)) {
+      if (v == null || v === '') next.delete(k);
+      else next.set(k, v);
+    }
+    next.sort();
+    const newSearch = next.toString();
+    const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '');
+    window.history.replaceState(null, '', newUrl);
+    // 触发 React 重渲染以反映新的 URL 参数
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, []);
+
+  const setPlatform = useCallback((v: string) => {
+    updateParams({ platform: v || null, kind: 'contents', order_by: null, order_dir: null, page: null });
+  }, [updateParams]);
+
+  const setKind = useCallback((v: string) => {
+    const updates: Record<string, string | null> = { kind: v !== 'contents' ? v : null, page: null };
+    if (v === 'creators') { updates['order_by'] = 'fans'; updates['order_dir'] = 'desc'; }
+    else { updates['order_by'] = null; updates['order_dir'] = null; }
+    updateParams(updates);
+  }, [updateParams]);
+
+  const setPage = useCallback((p: number) => {
+    updateParams({ page: p > 1 ? String(p) : null });
+  }, [updateParams]);
+
+  const setPageSize = useCallback((s: number) => {
+    updateParams({ page_size: s !== 20 ? String(s) : null, page: null });
+  }, [updateParams]);
+
+  const setSearchKeyword = useCallback((v: string) => {
+    updateParams({ keyword: v || null, page: null });
+  }, [updateParams]);
+
+  const setFilterTaskId = useCallback((v: string | null) => {
+    updateParams({ task_id: v, content_id: null, keyword: null, page: null });
+  }, [updateParams]);
+
+  const setFilterContentId = useCallback((v: string | null) => {
+    updateParams({ content_id: v, page: null });
+  }, [updateParams]);
+
+  const setOrderBy = useCallback((v: string) => {
+    updateParams({ order_by: v || null });
+  }, [updateParams]);
+
+  const setOrderDirection = useCallback((v: string) => {
+    updateParams({ order_dir: v !== 'desc' ? v : null });
+  }, [updateParams]);
+
+  const setViewMode = useCallback((v: 'table' | 'card') => {
+    updateParams({ view: v !== 'card' ? v : null });
+  }, [updateParams]);
+
   const batchAnalyzeMutation = useMutation({
     mutationFn: () => batchAnalyze({
       platform,
@@ -86,14 +152,6 @@ export default function DataPage() {
       message.success(`批量分析完成：${res.article_count} 篇文章，${res.total_comment_count} 条评论`);
     },
   });
-  const [commentModalCid, setCommentModalCid] = useState<string | null>(null);
-  const [commentModalPage, setCommentModalPage] = useState(1);
-  const [commentModalPageSize, setCommentModalPageSize] = useState(20);
-  const [isCommentFullscreen, setIsCommentFullscreen] = useState(false);
-  const [orderBy, setOrderBy] = useState('');
-  const [orderDirection, setOrderDirection] = useState('desc');
-  const [viewMode, setViewMode] = useState<'table' | 'card'>('card');
-  const [pageSize, setPageSize] = useState(20);
 
   // 视频类平台支持的排序字段
   const videoSortOptions = useMemo(() => {
@@ -142,26 +200,14 @@ export default function DataPage() {
     ];
   }, [kind]);
 
-  // 切换平台/类型时重置排序
+  // 切换平台/类型时重置排序（setPlatform/setKind 内部已处理子字段重置）
   const handlePlatformChange = useCallback((v: string) => {
     setPlatform(v);
-    setKind('contents');
-    setOrderBy('');
-    setOrderDirection('desc');
-    setPage(1);
-  }, []);
+  }, [setPlatform]);
 
   const handleKindChange = useCallback((v: string) => {
     setKind(v);
-    if (v === 'creators') {
-      setOrderBy('fans');
-      setOrderDirection('desc');
-    } else {
-      setOrderBy('');
-      setOrderDirection('desc');
-    }
-    setPage(1);
-  }, []);
+  }, [setKind]);
 
   const { data: platformMeta } = useQuery({
     queryKey: ['db-platforms'],
@@ -176,10 +222,10 @@ export default function DataPage() {
 
   // 无 URL 参数时，默认选中第一个启用的平台
   useEffect(() => {
-    if (!urlPlatform && enabledPlatforms && enabledPlatforms.length > 0 && !platform) {
+    if (!platform && enabledPlatforms && enabledPlatforms.length > 0) {
       setPlatform(enabledPlatforms[0].code);
     }
-  }, [urlPlatform, enabledPlatforms, platform]);
+  }, [platform, enabledPlatforms, setPlatform]);
 
   // ESC 退出评论全屏
   useEffect(() => {
@@ -451,6 +497,7 @@ export default function DataPage() {
                   icon={<ReadOutlined />}
                   onClick={(e) => {
                     e.stopPropagation();
+                    sessionStorage.setItem('dataPageReturnUrl', window.location.pathname + window.location.search);
                     navigate(`/zhihu/${cid}`);
                   }}
                 >
@@ -545,23 +592,15 @@ export default function DataPage() {
 
   const handleSearch = useCallback((v: string) => {
     setSearchKeyword(v);
-    setPage(1);
-  }, []);
+  }, [setSearchKeyword]);
 
   const handleTaskIdChange = useCallback((v: string | null) => {
     setFilterTaskId(v);
-    setFilterContentId(null);
-    setSearchKeyword('');
     setKeyword('');
-    setPage(1);
-  }, []);
+  }, [setFilterTaskId]);
 
   const handleClearFilters = useCallback(() => {
-    setFilterTaskId(null);
-    setFilterContentId(null);
-    setSearchKeyword('');
     setKeyword('');
-    setPage(1);
     setSearchParams({});
   }, [setSearchParams]);
 

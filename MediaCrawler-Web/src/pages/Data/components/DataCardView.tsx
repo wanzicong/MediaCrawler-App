@@ -175,6 +175,7 @@ export default function DataCardView({
                             icon={<ReadOutlined />}
                             onClick={(e) => {
                               e.stopPropagation();
+                              sessionStorage.setItem('dataPageReturnUrl', window.location.pathname + window.location.search);
                               navigate(`/zhihu/${cid}`);
                             }}
                           >

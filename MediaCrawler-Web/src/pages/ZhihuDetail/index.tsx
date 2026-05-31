@@ -1,13 +1,18 @@
+import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
-  App, Button, Card, Descriptions, Divider, Skeleton, Space, Tag, Typography, Result, Empty,
+  App, Button, Card, Descriptions, Divider, Skeleton, Space, Tag, Typography, Result, Empty, Tooltip,
 } from 'antd';
 import {
-  ArrowLeftOutlined, ExportOutlined, LikeOutlined, CommentOutlined, ClockCircleOutlined, UserOutlined, RocketOutlined,
+  ArrowLeftOutlined, ExportOutlined, LikeOutlined, CommentOutlined, ClockCircleOutlined,
+  UserOutlined, RocketOutlined, RobotOutlined, PlusOutlined,
 } from '@ant-design/icons';
 import { fetchDbData } from '@/api';
 import { startCrawler } from '@/api/modules/crawler';
+import { analyzeContent } from '@/api/modules/ai';
+import type { ContentAnalysisResponse } from '@/api/modules/ai';
+import { batchCreateKeywords } from '@/api/modules/keywords';
 import PageHeader from '@/components/PageHeader';
 import { FIELD_LABELS, ZHIHU_CONTENT_TYPE_LABELS } from '@/constants';
 import { formatText } from '@/utils/format';
@@ -24,6 +29,8 @@ function sanitizeHtml(html: string): string {
 export default function ZhihuDetailPage() {
   const { contentId } = useParams<{ contentId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnPath = sessionStorage.getItem('dataPageReturnUrl') || '/data';
   const { message, modal } = App.useApp();
 
   const { data, isLoading, isError, error } = useQuery({
@@ -72,6 +79,51 @@ export default function ZhihuDetailPage() {
     });
   };
 
+  // ── AI 内容分析 ──────────────────────────────────────────────
+  const [aiResult, setAiResult] = useState<ContentAnalysisResponse | null>(null);
+  const [addedKeywords, setAddedKeywords] = useState<Set<string>>(new Set());
+
+  const analyzeMut = useMutation({
+    mutationFn: () => analyzeContent({ platform: 'zhihu', content_id: contentId! }),
+    onSuccess: (res) => {
+      setAiResult(res);
+      message.success('AI 分析完成');
+    },
+    onError: (err: Error) => {
+      message.error(err.message || 'AI 分析失败');
+    },
+  });
+
+  const addKeywordsMut = useMutation({
+    mutationFn: (keywords: string[]) =>
+      batchCreateKeywords({ keywords, platform: 'zhihu' }),
+    onSuccess: (_, keywords) => {
+      setAddedKeywords((prev) => {
+        const next = new Set(prev);
+        keywords.forEach((k) => next.add(k));
+        return next;
+      });
+      message.success(`已添加 ${keywords.length} 个关键词到关键词库`);
+    },
+    onError: (err: Error) => {
+      message.error(err.message || '添加关键词失败');
+    },
+  });
+
+  const handleAddKeyword = (keyword: string) => {
+    addKeywordsMut.mutate([keyword]);
+  };
+
+  const handleAddAllKeywords = () => {
+    if (!aiResult?.keywords?.length) return;
+    const remaining = aiResult.keywords.filter((k) => !addedKeywords.has(k));
+    if (remaining.length === 0) {
+      message.info('所有关键词已添加');
+      return;
+    }
+    addKeywordsMut.mutate(remaining);
+  };
+
   if (isLoading) {
     return (
       <>
@@ -111,7 +163,7 @@ export default function ZhihuDetailPage() {
         description="内容阅读"
         extra={
           <Space>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>返回</Button>
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(returnPath)}>返回</Button>
             {data.content_url && (
               <Button
                 icon={<ExportOutlined />}
@@ -127,6 +179,13 @@ export default function ZhihuDetailPage() {
               onClick={handleCrawlCreator}
             >
               爬取作者全部信息
+            </Button>
+            <Button
+              icon={<RobotOutlined />}
+              loading={analyzeMut.isPending}
+              onClick={() => analyzeMut.mutate()}
+            >
+              AI 分析
             </Button>
           </Space>
         }
@@ -190,6 +249,61 @@ export default function ZhihuDetailPage() {
           >
             {contentBody || '（无内容）'}
           </Typography.Paragraph>
+        )}
+
+        {/* AI 分析结果 */}
+        {aiResult && (
+          <>
+            <Divider style={{ margin: '20px 0' }} />
+            <Card
+              size="small"
+              title={
+                <Space>
+                  <RobotOutlined />
+                  <span>AI 分析总结</span>
+                </Space>
+              }
+              style={{ marginBottom: 16, background: '#fafafa' }}
+            >
+              <Typography.Paragraph style={{ fontSize: 14, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                {aiResult.summary}
+              </Typography.Paragraph>
+
+              <Divider style={{ margin: '12px 0' }} />
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Typography.Text strong>关键词总结</Typography.Text>
+                {aiResult.keywords.some((k) => !addedKeywords.has(k)) && (
+                  <Button
+                    size="small"
+                    type="dashed"
+                    icon={<PlusOutlined />}
+                    loading={addKeywordsMut.isPending}
+                    onClick={handleAddAllKeywords}
+                  >
+                    全部添加到关键词库
+                  </Button>
+                )}
+              </div>
+              <Space wrap size={[8, 8]}>
+                {aiResult.keywords.map((kw) => {
+                  const added = addedKeywords.has(kw);
+                  return (
+                    <Tooltip key={kw} title={added ? '已添加' : '点击添加到关键词库'}>
+                      <Tag
+                        color={added ? 'green' : 'blue'}
+                        style={{ cursor: added ? 'default' : 'pointer', fontSize: 13, padding: '2px 8px' }}
+                        onClick={() => !added && handleAddKeyword(kw)}
+                        closeIcon={!added ? <PlusOutlined /> : undefined}
+                      >
+                        {kw}
+                      </Tag>
+                    </Tooltip>
+                  );
+                })}
+              </Space>
+            </Card>
+          </>
         )}
 
         <Divider style={{ margin: '20px 0' }} />

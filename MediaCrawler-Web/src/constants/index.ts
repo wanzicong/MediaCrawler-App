@@ -26,4 +26,5 @@ export {
   FIELD_LABELS,
   TS_FIELDS,
   IMAGE_FIELDS,
+  PAYLOAD_FIELD_LABELS,
 } from './fields';

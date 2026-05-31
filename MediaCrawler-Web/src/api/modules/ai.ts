@@ -140,3 +140,22 @@ export interface BatchAnalyzeResponse {
 export function batchAnalyze(data: BatchAnalyzeRequest, signal?: AbortSignal) {
   return httpPost<BatchAnalyzeResponse>('/api/ai/batch-analyze', data, { signal });
 }
+
+// ── Content Analysis (summary + keywords) ──────────────────────
+
+export interface ContentAnalysisRequest {
+  platform: string;
+  content_id: string;
+}
+
+export interface ContentAnalysisResponse {
+  platform: string;
+  content_id: string;
+  title: string;
+  summary: string;
+  keywords: string[];
+}
+
+export function analyzeContent(data: ContentAnalysisRequest, signal?: AbortSignal) {
+  return httpPost<ContentAnalysisResponse>('/api/ai/analyze-content', data, { signal });
+}

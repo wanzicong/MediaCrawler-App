@@ -68,3 +68,33 @@ export const TS_FIELDS: ReadonlySet<string> = new Set([
 export const IMAGE_FIELDS: ReadonlySet<string> = new Set([
   'avatar', 'user_avatar', 'cover_url', 'video_cover_url', 'image_list',
 ]);
+
+/** 配置快照 payload 字段 → 中文标签 */
+export const PAYLOAD_FIELD_LABELS: Record<string, string> = {
+  platform: '平台',
+  login_type: '登录方式',
+  crawler_type: '爬取类型',
+  keywords: '关键词',
+  specified_ids: '指定帖子ID',
+  creator_ids: '创作者ID',
+  start_page: '起始页',
+  enable_comments: '采集评论',
+  enable_sub_comments: '采集子评论',
+  save_option: '保存方式',
+  cookies: 'Cookies',
+  headless: '无头模式(headless)',
+  enable_cdp_mode: 'CDP模式',
+  cdp_headless: 'CDP无头模式',
+  enable_ip_proxy: 'IP代理',
+  ip_proxy_pool_count: '代理池数量',
+  ip_proxy_provider_name: '代理提供商',
+  crawler_max_notes_count: '最大爬取数量',
+  max_concurrency_num: '最大并发数',
+  crawler_max_comments_count_singlenotes: '单帖最大评论数',
+  crawler_max_sleep_sec: '最小休眠(秒)',
+  crawler_max_sleep_sec_max: '最大休眠(秒)',
+  enable_get_medias: '下载媒体',
+  enable_get_wordcloud: '生成词云',
+  save_login_state: '保存登录状态',
+  xhs_international: '小红书国际版',
+};

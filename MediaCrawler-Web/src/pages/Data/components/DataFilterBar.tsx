@@ -66,17 +66,24 @@ export default function DataFilterBar({
   onTaskIdChange,
 }: Props) {
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const prevKeywordRef = useRef(keyword);
 
- useEffect(() => {
-   if (timerRef.current) clearTimeout(timerRef.current);
-   timerRef.current = setTimeout(() => {
-     onSearch(keyword);
-   }, 300);
-   return () => {
-     if (timerRef.current) clearTimeout(timerRef.current);
-   };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyword]);
+  useEffect(() => {
+    // 跳过首次挂载（keyword 值未变化），避免覆盖 URL 中的分页参数
+    if (prevKeywordRef.current === keyword) {
+      prevKeywordRef.current = keyword;
+      return;
+    }
+    prevKeywordRef.current = keyword;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      onSearch(keyword);
+    }, 300);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [keyword]);
 
   return (
     <Space wrap style={{ marginBottom: 16 }}>

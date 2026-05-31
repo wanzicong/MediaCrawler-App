@@ -777,3 +777,126 @@ async def batch_analyze(req: BatchAnalyzeRequest):
         ],
         suggestions=parsed.get("suggestions", []),
     )
+
+
+# ── Content Analysis (summary + keywords) ─────────────────────────
+
+class ContentAnalysisRequest(BaseModel):
+    platform: str
+    content_id: Any
+
+
+class ContentAnalysisResponse(BaseModel):
+    platform: str
+    content_id: str
+    title: str
+    summary: str
+    keywords: list[str]
+
+
+@router.post("/analyze-content", response_model=ContentAnalysisResponse)
+async def analyze_content(req: ContentAnalysisRequest):
+    content_id: str = str(req.content_id)
+
+    # ── 阶段 1: 校验平台 ─────────────────────────────────────────
+    if req.platform not in PLATFORM_META:
+        raise HTTPException(400, f"不支持的平台: {req.platform}")
+
+    # ── 阶段 2: 获取内容数据 ─────────────────────────────────────
+    result = await DataQueryService.query(
+        platform=req.platform,
+        kind="contents",
+        page=1,
+        page_size=1,
+        content_id=content_id,
+    )
+    items = result.get("items", [])
+    if not items:
+        raise HTTPException(404, "内容不存在")
+
+    item = items[0]
+    title = str(item.get("title", "") or item.get("content_text", "") or "")[:200]
+    content_html = str(item.get("content_html", "") or "")
+    content_text = str(item.get("content_text", "") or "")
+
+    # 提取纯文本用于分析
+    if content_html:
+        clean_text = re.sub(r'<[^>]+>', '', content_html)
+        clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    else:
+        clean_text = content_text
+
+    # 截断过长文本
+    if len(clean_text) > 3000:
+        clean_text = clean_text[:3000] + "..."
+
+    if not clean_text:
+        raise HTTPException(400, "内容为空，无法分析")
+
+    # ── 阶段 3: 构建 Prompt ──────────────────────────────────────
+    prompt = f"""请分析以下内容，返回严格的JSON格式分析结果。
+
+标题：{title}
+
+正文内容：
+{clean_text}
+
+要求返回以下JSON结构（只返回JSON，不要markdown代码块，不要任何额外文字）：
+{{
+    "summary": "内容总结，100-200字，概括核心观点和要点",
+    "keywords": ["关键词1", "关键词2", "关键词3", "关键词4", "关键词5"]
+}}
+
+注意：
+- summary 要精炼准确，突出核心观点
+- keywords 提取 3-5 个最核心的关键词/短语，每个 2-8 个字
+- 关键词要能代表内容的核心主题，便于后续检索分类"""
+
+    # ── 阶段 4: 调用 DeepSeek API ────────────────────────────────
+    api_key = _get_api_key()
+    if not api_key:
+        raise HTTPException(500, "未配置 DEEPSEEK_API_KEY")
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        try:
+            resp = await client.post(
+                f"{DEEPSEEK_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            ai_text = data["choices"][0]["message"]["content"]
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(e.response.status_code, f"DeepSeek API 错误: {e.response.text}")
+        except Exception as e:
+            raise HTTPException(500, f"请求失败: {str(e)}")
+
+    # ── 阶段 5: 解析 JSON ────────────────────────────────────────
+    raw_text = ai_text.strip()
+    if raw_text.startswith("```"):
+        lines = raw_text.split("\n")
+        if len(lines) >= 3:
+            lines = lines[1:]
+            if lines[-1].strip() == "```":
+                lines = lines[:-1]
+            raw_text = "\n".join(lines)
+
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        raise HTTPException(500, f"AI 返回内容无法解析为 JSON: {ai_text[:500]}")
+
+    return ContentAnalysisResponse(
+        platform=req.platform,
+        content_id=content_id,
+        title=parsed.get("title", title),
+        summary=parsed.get("summary", ""),
+        keywords=parsed.get("keywords", []),
+    )

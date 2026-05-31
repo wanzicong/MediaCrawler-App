@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Alert,
   Button,
@@ -6,8 +7,10 @@ import {
   Descriptions,
   Modal,
   Row,
+  Segmented,
   Skeleton,
   Space,
+  Table,
   Tag,
   Typography,
   theme,
@@ -21,6 +24,7 @@ import {
   PLATFORM_LABELS,
   CRAWLER_TYPE_LABELS,
   TASK_STATUS_CONFIG,
+  PAYLOAD_FIELD_LABELS,
 } from '@/constants';
 import { fetchEnabledPlatforms } from '@/api/modules/platforms';
 import type { CrawlerTask, TaskDataStats } from '@/types/config';
@@ -53,6 +57,15 @@ export default function CrawlerTaskDetailModal({
   onDelete,
 }: Props) {
   const { token } = theme.useToken();
+  const [snapshotView, setSnapshotView] = useState<'json' | 'table'>('table');
+
+  const payloadTableData = task?.payload_snapshot
+    ? Object.entries(task.payload_snapshot).map(([key, value]) => ({
+        key,
+        field: PAYLOAD_FIELD_LABELS[key] || key,
+        value: typeof value === 'boolean' ? (value ? '是' : '否') : String(value ?? ''),
+      }))
+    : [];
 
   const { data: platforms } = useQuery({
     queryKey: ['platforms', 'enabled'],
@@ -196,21 +209,47 @@ export default function CrawlerTaskDetailModal({
             </Typography.Text>
           )}
 
-          <Typography.Title level={5}>配置快照</Typography.Title>
-          <pre
-            style={{
-              maxHeight: 400,
-              overflow: 'auto',
-              background: token.colorFillAlter,
-              border: `1px solid ${token.colorBorderSecondary}`,
-              padding: 12,
-              borderRadius: token.borderRadius,
-              fontSize: 12,
-              lineHeight: 1.5,
-            }}
-          >
-            {JSON.stringify(task.payload_snapshot, null, 2)}
-          </pre>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <Typography.Title level={5} style={{ marginBottom: 0 }}>配置快照</Typography.Title>
+            <Segmented
+              size="small"
+              value={snapshotView}
+              onChange={(val) => setSnapshotView(val as 'json' | 'table')}
+              options={[
+                { label: 'JSON', value: 'json' },
+                { label: '表格', value: 'table' },
+              ]}
+            />
+          </div>
+          {snapshotView === 'json' ? (
+            <pre
+              style={{
+                maxHeight: 400,
+                overflow: 'auto',
+                background: token.colorFillAlter,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                padding: 12,
+                borderRadius: token.borderRadius,
+                fontSize: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              {JSON.stringify(task.payload_snapshot, null, 2)}
+            </pre>
+          ) : (
+            <Table
+              dataSource={payloadTableData}
+              columns={[
+                { title: '配置项', dataIndex: 'field', width: 200 },
+                { title: '值', dataIndex: 'value' },
+              ]}
+              pagination={false}
+              size="small"
+              bordered
+              scroll={{ y: 400 }}
+              style={{ marginBottom: 0 }}
+            />
+          )}
         </>
       )}
     </Modal>
