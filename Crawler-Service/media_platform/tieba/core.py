@@ -34,7 +34,6 @@ from model.m_baidu_tieba import TiebaCreator, TiebaNote
 from proxy.proxy_ip_pool import IpInfoModel, ProxyIpPool, create_ip_pool
 from store import tieba as tieba_store
 from tools import utils
-from tools.cdp_browser import CDPBrowserManager
 from var import crawler_type_var, source_keyword_var
 from services.progress_reporter import get_progress_reporter
 
@@ -48,14 +47,12 @@ class TieBaCrawler(AbstractCrawler):
     context_page: Page
     tieba_client: BaiduTieBaClient
     browser_context: BrowserContext
-    cdp_manager: Optional[CDPBrowserManager]
 
     def __init__(self) -> None:
         self.index_url = "https://tieba.baidu.com"
         self.cookie_urls = [self.index_url]
         self.user_agent = utils.get_user_agent()
         self._page_extractor = TieBaExtractor()
-        self.cdp_manager = None
 
     async def start(self) -> None:
         """

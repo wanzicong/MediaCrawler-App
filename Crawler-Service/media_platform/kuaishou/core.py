@@ -39,7 +39,6 @@ from model.m_kuaishou import VideoUrlInfo, CreatorUrlInfo
 from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import kuaishou as kuaishou_store
 from tools import utils
-from tools.cdp_browser import CDPBrowserManager
 from var import comment_tasks_var, crawler_type_var, source_keyword_var
 from services.progress_reporter import get_progress_reporter
 
@@ -53,13 +52,11 @@ class KuaishouCrawler(AbstractCrawler):
     context_page: Page
     ks_client: KuaiShouClient
     browser_context: BrowserContext
-    cdp_manager: Optional[CDPBrowserManager]
 
     def __init__(self):
         self.index_url = "https://www.kuaishou.com"
         self.cookie_urls = [self.index_url]
         self.user_agent = utils.get_user_agent()
-        self.cdp_manager = None
         self.ip_proxy_pool = None  # Proxy IP pool, used for automatic proxy refresh
 
     async def start(self):

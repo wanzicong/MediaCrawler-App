@@ -138,7 +138,7 @@ class AbstractCrawler(ABC):
         工作流程:
           1. 读取 config.BROWSER_MODE 决定策略
           2. "remote" / "auto": 尝试 BrowserServiceClient
-          3. "local" / fallback: 使用本地 CDPBrowserManager
+          3. fallback: 使用标准 Playwright 模式
           4. 最终回退: launch_browser() 标准 Playwright 模式
 
         子类可以覆盖此方法实现平台特有逻辑。
@@ -185,7 +185,7 @@ class AbstractCrawler(ABC):
                     ) from e
                 utils.logger.warning(
                     f"[{self.__class__.__name__}] Browser-Service failed ({e}), "
-                    f"falling back to local CDP..."
+                    f"falling back to standard Playwright mode..."
                 )
 
         # remote 模式下 Browser-Service 不可用（返回 None 或不可达）也必须报错
@@ -195,12 +195,13 @@ class AbstractCrawler(ABC):
                 "Please ensure Browser-Service is running or set BROWSER_MODE=auto."
             )
 
-        # 策略 2: 本地 CDP 模式（local 或 auto 回退）
-        return await self._launch_via_local_cdp(
-            playwright=playwright,
-            playwright_proxy=playwright_proxy,
-            user_agent=user_agent,
-            headless=headless,
+        # 策略 2: 回退到标准 Playwright 模式（headless）
+        utils.logger.info(
+            f"[{self.__class__.__name__}] Falling back to standard Playwright mode"
+        )
+        chromium = playwright.chromium
+        return await self.launch_browser(
+            chromium, playwright_proxy, user_agent, headless
         )
 
     # ==================== 内部辅助方法 ====================
@@ -258,62 +259,6 @@ class AbstractCrawler(ABC):
 
         return browser_context
 
-    async def _launch_via_local_cdp(
-        self,
-        playwright: Playwright,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool,
-    ) -> BrowserContext:
-        """
-        通过本地 CDPBrowserManager 启动浏览器。
-
-        如果本地 CDP 启动失败，自动回退到标准 Playwright 模式。
-
-        Returns:
-            BrowserContext 对象
-
-        Raises:
-            RuntimeError: 无法导入 CDPBrowserManager 时
-        """
-        try:
-            from tools.cdp_browser import CDPBrowserManager
-        except ImportError as e:
-            raise RuntimeError(
-                "Cannot import CDPBrowserManager for local CDP mode. "
-                "Please ensure Crawler-Service is properly installed."
-            ) from e
-
-        try:
-            manager = CDPBrowserManager()
-            browser_context = await manager.launch_and_connect(
-                playwright=playwright,
-                playwright_proxy=playwright_proxy,
-                user_agent=user_agent,
-                headless=headless,
-            )
-
-            # 保存 cdp_manager 引用（向后兼容）
-            self.cdp_manager = manager
-
-            # 显示浏览器信息
-            browser_info = await manager.get_browser_info()
-            utils.logger.info(
-                f"[{self.__class__.__name__}] Local CDP browser info: {browser_info}"
-            )
-
-            return browser_context
-
-        except Exception as e:
-            utils.logger.error(
-                f"[{self.__class__.__name__}] Local CDP launch failed, "
-                f"falling back to standard mode: {e}"
-            )
-            chromium = playwright.chromium
-            return await self.launch_browser(
-                chromium, playwright_proxy, user_agent, headless
-            )
-
     # ==================== 清理 ====================
 
     async def close(self):
@@ -322,14 +267,9 @@ class AbstractCrawler(ABC):
 
         清理顺序:
           1. Browser-Service 远程模式 → 通过 BrowserServiceClient.cleanup()
-          2. 本地 CDP 模式 → 通过 cdp_manager.cleanup()
-          3. 标准 Playwright 模式 → 直接关闭 browser_context
-
-        防御性设计: 兼容子类未调用 super().__init__() 的情况，
-        使用 getattr 安全访问实例属性。
+          2. 标准 Playwright 模式 → 直接关闭 browser_context
         """
         client = getattr(self, "_browser_client", None)
-        manager = getattr(self, "cdp_manager", None)
         context = getattr(self, "browser_context", None)
 
         # 1. 远程 Browser-Service 模式
@@ -348,26 +288,8 @@ class AbstractCrawler(ABC):
             finally:
                 self._browser_client = None
                 self.browser_context = None
-            # 注意: 不提前 return，继续清理可能残留的 cdp_manager
 
-        # 2. 本地 CDP 模式
-        if manager is not None:
-            try:
-                await manager.cleanup()
-                utils.logger.info(
-                    f"[{self.__class__.__name__}.close] "
-                    "CDP manager cleaned up"
-                )
-            except Exception as e:
-                utils.logger.warning(
-                    f"[{self.__class__.__name__}.close] "
-                    f"Error cleaning CDP manager: {e}"
-                )
-            finally:
-                self.cdp_manager = None
-                self.browser_context = None
-
-        # 3. 标准 Playwright 模式 / 残留 browser_context
+        # 2. 标准 Playwright 模式 / 残留 browser_context
         if context is not None:
             try:
                 await context.close()
@@ -391,19 +313,14 @@ class AbstractCrawler(ABC):
         """
         检查浏览器是否仍然连接。
 
-        按优先级检查: BrowserServiceClient → CDPBrowserManager → BrowserContext
+        按优先级检查: BrowserServiceClient → BrowserContext
         """
         # 1. 检查 BrowserServiceClient
         client = getattr(self, "_browser_client", None)
         if client is not None:
             return client.is_connected()
 
-        # 2. 检查本地 CDPBrowserManager
-        manager = getattr(self, "cdp_manager", None)
-        if manager is not None:
-            return manager.is_connected()
-
-        # 3. 检查标准 Playwright BrowserContext
+        # 2. 检查标准 Playwright BrowserContext
         context = getattr(self, "browser_context", None)
         if context is not None:
             try:
@@ -421,17 +338,13 @@ class AbstractCrawler(ABC):
 
         按优先级注入:
           1. BrowserServiceClient (远程模式)
-          2. CDPBrowserManager (本地 CDP 模式)
-          3. BrowserContext (标准 Playwright 模式)
+          2. BrowserContext (标准 Playwright 模式)
         """
         client = getattr(self, "_browser_client", None)
-        manager = getattr(self, "cdp_manager", None)
         context = getattr(self, "browser_context", None)
 
         if client is not None:
             await client.add_stealth_script(script_path)
-        elif manager is not None:
-            await manager.add_stealth_script(script_path)
         elif context is not None and os.path.exists(script_path):
             await context.add_init_script(path=script_path)
             utils.logger.info(f"[AbstractCrawler] Added stealth script: {script_path}")

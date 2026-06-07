@@ -40,7 +40,6 @@ from model.m_zhihu import ZhihuContent, ZhihuCreator
 from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import zhihu as zhihu_store
 from tools import utils
-from tools.cdp_browser import CDPBrowserManager
 from var import crawler_type_var, source_keyword_var
 from services.progress_reporter import get_progress_reporter
 
@@ -54,7 +53,6 @@ class ZhihuCrawler(AbstractCrawler):
     context_page: Page
     zhihu_client: ZhiHuClient
     browser_context: BrowserContext
-    cdp_manager: Optional[CDPBrowserManager]
 
     def __init__(self) -> None:
         self.index_url = "https://www.zhihu.com"
@@ -62,7 +60,6 @@ class ZhihuCrawler(AbstractCrawler):
         # self.user_agent = utils.get_user_agent()
         self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         self._extractor = ZhihuExtractor()
-        self.cdp_manager = None
         self.ip_proxy_pool = None  # Proxy IP pool for automatic proxy refresh
 
     async def start(self) -> None:

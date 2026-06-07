@@ -2,7 +2,7 @@
 """
 Browser-Service 客户端
 
-替代 CDPBrowserManager, 通过 HTTP REST API 与 Browser-Service 通信,
+通过 HTTP REST API 与 Browser-Service 通信,
 使用 Playwright 的 connect_over_cdp 连接远程浏览器实例。
 
 功能:
@@ -10,7 +10,6 @@ Browser-Service 客户端
   - cleanup: 通知 Browser-Service 销毁实例
   - health_check: 检查远程浏览器实例健康状态
   - is_connected: 检查本地与远程浏览器的连接状态
-  - fallback: Browser-Service 不可用时回退到本地 CDPBrowserManager
 
 Usage:
     client = BrowserServiceClient(base_url="http://browser-service:9500")
@@ -43,14 +42,10 @@ class BrowserServiceClient:
     """
     通过 HTTP + WebSocket 与 Browser-Service 通信的客户端。
 
-    替代 CDPBrowserManager:
-      - 从 Browser-Service 池中申请浏览器实例
+    通过 Browser-Service 池管理浏览器实例:
+      - 从池中申请浏览器实例
       - 通过 Playwright 的 connect_over_cdp(ws_url) 连接
       - 使用完毕后归还/销毁实例
-
-    自动 Fallback:
-      如果 Browser-Service 不可用 (连接超时/拒绝), 自动回退到
-      本地 CDPBrowserManager, 保持兼容性。
     """
 
     # ---- 配置 ----
@@ -98,9 +93,6 @@ class BrowserServiceClient:
         # 与 Playwright 的连接对象 (由 launch_and_connect 设置)
         self.browser: Optional[Any] = None  # playwright Browser 对象
         self.browser_context: Optional[Any] = None  # playwright BrowserContext 对象
-
-        # Fallback: 本地 CDPBrowserManager (延迟导入)
-        self._local_manager: Optional[Any] = None
 
         self._cleanup_registered = False
 
@@ -378,7 +370,7 @@ class BrowserServiceClient:
             return {"healthy": False, "error": str(e)}
 
     # ------------------------------------------------------------------
-    # 核心方法: launch_and_connect (替代 CDPBrowserManager)
+    # 核心方法: launch_and_connect (浏览器实例获取 + CDP 连接)
     # ------------------------------------------------------------------
 
     async def launch_and_connect(
@@ -390,13 +382,12 @@ class BrowserServiceClient:
         platform: Optional[str] = None,
     ) -> Any:
         """
-        启动浏览器并连接 — 与 CDPBrowserManager.launch_and_connect 相同接口。
+        启动浏览器并连接 — 通过 Browser-Service 获取远程浏览器实例。
 
         工作流程:
           1. 检测 Browser-Service 是否可用
-          2. 如果可用: POST /api/v1/instances → 获取 cdp_url
+          2. POST /api/v1/instances → 获取浏览器实例
           3. playwright.chromium.connect_over_cdp(cdp_url) → 连接
-          4. 如果不可用: 回退到本地 CDPBrowserManager
 
         Args:
             playwright: Playwright 实例 (来自 async_playwright().start())
@@ -425,15 +416,9 @@ class BrowserServiceClient:
                 platform=platform,
             )
         else:
-            utils.logger.info(
-                "[BrowserServiceClient] Browser-Service unavailable, "
-                "falling back to local CDP browser management"
-            )
-            return await self._launch_via_local(
-                playwright=playwright,
-                playwright_proxy=playwright_proxy,
-                user_agent=user_agent,
-                headless=headless,
+            raise RuntimeError(
+                "[BrowserServiceClient] Browser-Service is not available. "
+                "Please start Browser-Service (pnpm dev:browser) or ensure BROWSER_SERVICE_URL is correct."
             )
 
     async def _launch_via_service(
@@ -519,34 +504,6 @@ class BrowserServiceClient:
         self.browser_context = browser_context
         return browser_context
 
-    async def _launch_via_local(
-        self,
-        playwright: Any,
-        playwright_proxy: Optional[Dict[str, str]] = None,
-        user_agent: Optional[str] = None,
-        headless: bool = False,
-    ) -> Any:
-        """
-        回退到本地 CDPBrowserManager 启动浏览器。
-
-        延迟导入 CDPBrowserManager, 避免在没有本地 Chrome 时报错。
-        """
-        try:
-            from tools.cdp_browser import CDPBrowserManager
-        except ImportError as e:
-            raise RuntimeError(
-                "Cannot import CDPBrowserManager for fallback. "
-                "Please ensure Crawler-Service is properly installed."
-            ) from e
-
-        self._local_manager = CDPBrowserManager()
-        return await self._local_manager.launch_and_connect(
-            playwright=playwright,
-            playwright_proxy=playwright_proxy,
-            user_agent=user_agent,
-            headless=headless,
-        )
-
     # ------------------------------------------------------------------
     # 反检测 & Cookie 辅助 (透传)
     # ------------------------------------------------------------------
@@ -600,11 +557,8 @@ class BrowserServiceClient:
         """
         检查浏览器是否仍然连接。
 
-        优先检查远程 Browser 连接, 如果使用本地 CDPBrowserManager 则委派。
+        检查远程 Browser 连接状态。
         """
-        if self._local_manager is not None:
-            return self._local_manager.is_connected()
-
         if self.browser is not None:
             try:
                 return self.browser.is_connected()
@@ -614,14 +568,11 @@ class BrowserServiceClient:
 
     async def get_browser_info(self) -> Dict[str, Any]:
         """
-        获取浏览器信息 (兼容 CDPBrowserManager 接口)。
+        获取浏览器信息。
 
         Returns:
             浏览器信息字典
         """
-        if self._local_manager is not None:
-            return await self._local_manager.get_browser_info()
-
         info: Dict[str, Any] = {
             "instance_id": self._instance_id,
             "cdp_port": self._cdp_port,
@@ -648,11 +599,7 @@ class BrowserServiceClient:
         工作流程:
           1. 关闭 browser_context (page 关闭)
           2. 断开 browser 连接
-          3. 如果是 Browser-Service 模式: 调用 DELETE /api/v1/instances/{id}
-          4. 如果是本地模式: 委派给 CDPBrowserManager.cleanup()
-
-        Args:
-            force: 是否强制清理 (传递给本地 CDPBrowserManager)
+          3. 调用 DELETE /api/v1/instances/{id} 销毁远程实例
         """
         # 1. 关闭浏览器上下文
         if self.browser_context:
@@ -695,14 +642,6 @@ class BrowserServiceClient:
                 self._instance_id = None
                 self._cdp_port = None
 
-        # 4. 如果是本地 CDPBrowserManager 模式, 委派清理
-        if self._local_manager:
-            try:
-                await self._local_manager.cleanup(force=force)
-            except Exception as e:
-                utils.logger.warning(
-                    f"[BrowserServiceClient] Failed to cleanup local manager: {e}"
-                )
 
     # ------------------------------------------------------------------
     # 上下文管理器支持

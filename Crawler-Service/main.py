@@ -183,16 +183,7 @@ if __name__ == "__main__":
     from tools.app_runner import run
 
     def _force_stop() -> None:
-        c = crawler
-        if not c:
-            return
-        cdp_manager = getattr(c, "cdp_manager", None)
-        launcher = getattr(cdp_manager, "launcher", None)
-        if not launcher:
-            return
-        try:
-            launcher.cleanup()
-        except Exception:
-            pass
+        """首次 Ctrl+C 时强制停止。Browser-Service 管理浏览器生命周期，此处无需额外操作。"""
+        pass
 
     run(main, async_cleanup, cleanup_timeout_seconds=15.0, on_first_interrupt=_force_stop)

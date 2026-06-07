@@ -41,7 +41,6 @@ from base.base_crawler import AbstractCrawler
 from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import weibo as weibo_store
 from tools import utils
-from tools.cdp_browser import CDPBrowserManager
 from var import crawler_type_var, source_keyword_var
 from services.progress_reporter import get_progress_reporter
 
@@ -56,7 +55,6 @@ class WeiboCrawler(AbstractCrawler):
     context_page: Page
     wb_client: WeiboClient
     browser_context: BrowserContext
-    cdp_manager: Optional[CDPBrowserManager]
 
     def __init__(self):
         self.index_url = "https://www.weibo.com"
@@ -64,7 +62,6 @@ class WeiboCrawler(AbstractCrawler):
         self.cookie_urls = [self.mobile_index_url]
         self.user_agent = utils.get_user_agent()
         self.mobile_user_agent = utils.get_mobile_user_agent()
-        self.cdp_manager = None
         self.ip_proxy_pool = None  # Proxy IP pool for automatic proxy refresh
 
     async def start(self):

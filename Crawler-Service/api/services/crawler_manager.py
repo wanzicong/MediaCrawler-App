@@ -153,9 +153,6 @@ class CrawlerManager:
                     merged[k] = v
             if "headless" in overrides:
                 merged["cdp_headless"] = overrides["headless"]
-        if os.getenv("FORCE_CDP_HEADLESS"):
-            merged["cdp_headless"] = True
-            merged["headless"] = True
         merged["save_option"] = "db"
         return merged
 
@@ -234,21 +231,9 @@ class CrawlerManager:
             )
             await self._push_log(entry)
 
-    _CDP_PORT_BASE = 9222
-    # 平台 → CDP 端口映射（同平台任务共享浏览器，复用登录态）
-    _PLATFORM_CDP_PORTS = {
-        "xhs": 9222, "dy": 9223, "ks": 9224, "bili": 9225,
-        "wb": 9226, "tieba": 9227, "zhihu": 9228,
-    }
-
-    @staticmethod
-    def _platform_cdp_port(platform: str) -> int:
-        """按平台分配 CDP 端口，同平台任务共享浏览器以复用登录态"""
-        return CrawlerManager._PLATFORM_CDP_PORTS.get(platform, CrawlerManager._CDP_PORT_BASE)
-
     def _make_subprocess_env(self, task_id: int, platform: str = "") -> dict:
-        port = self._platform_cdp_port(platform) if platform else self._CDP_PORT_BASE + (task_id % 100)
-        return {**os.environ, "PYTHONUNBUFFERED": "1", "CDP_DEBUG_PORT": str(port)}
+        """构建子进程环境变量（浏览器由 Browser-Service 管理，无需 CDP 端口）"""
+        return {**os.environ, "PYTHONUNBUFFERED": "1"}
 
     def _build_command(self, task_id: int) -> list:
         import sys as _sys

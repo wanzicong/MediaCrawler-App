@@ -51,21 +51,10 @@ HEADLESS = False
 SAVE_LOGIN_STATE = True
 
 # ==================== CDP (Chrome DevTools Protocol) 配置 ====================
-# 是否启用 CDP 模式 - 使用用户本地的 Chrome/Edge 浏览器进行爬取，具有更好的反检测能力
-# 开启后，会自动检测并启动用户的 Chrome/Edge 浏览器，通过 CDP 协议进行控制
-# 该方式使用真实浏览器环境，包括用户的扩展、Cookie 和设置，大幅降低被风控检测的风险
+# 是否启用 CDP 模式 - 通过 Browser-Service 获取远程浏览器实例
+# 开启后，通过 Browser-Service (:9500) 获取 Chrome/Edge 浏览器，通过 CDP 协议进行控制
+# 该方式使用真实浏览器环境，具有更好的反检测能力
 ENABLE_CDP_MODE = True
-
-# CDP 调试端口，用于与浏览器通信
-# 如果端口被占用，系统会自动尝试下一个可用端口
-# 支持通过环境变量 CDP_DEBUG_PORT 注入（多任务并发时每任务分配专属端口）
-CDP_DEBUG_PORT = int(os.getenv("CDP_DEBUG_PORT", "9222"))
-
-# 自定义浏览器路径（可选）
-# 如果为空，系统会自动检测 Chrome/Edge 的安装路径
-# Windows 示例: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-# macOS 示例: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-CUSTOM_BROWSER_PATH = ""
 
 # 是否在 CDP 模式下启用无头模式
 # 注意：即使设置为 True，某些反检测功能在无头模式下可能无法正常工作
@@ -73,62 +62,10 @@ CDP_HEADLESS = False
 
 # ==================== Browser-Service 集成配置 ====================
 # 浏览器管理模式，控制爬虫如何获取和管理浏览器实例
-# - "auto" (默认):   优先使用 Browser-Service 远程浏览器池，不可用时自动回退本地 CDP
-# - "remote":        强制使用 Browser-Service（适用于生产环境，需要先启动 Browser-Service）
-# - "local":         强制使用本地 CDP 模式（适用于开发环境，不依赖 Browser-Service）
+# - "auto" (默认):   优先使用 Browser-Service 远程浏览器池，不可用时回退标准 Playwright
+# - "remote":        强制使用 Browser-Service（生产环境，需要先启动 Browser-Service:9500）
 # 支持通过环境变量 BROWSER_MODE 注入
 BROWSER_MODE = os.getenv("BROWSER_MODE", "auto")
-
-# 浏览器启动超时时间（秒）
-BROWSER_LAUNCH_TIMEOUT = 60
-
-# 是否连接用户已打开的浏览器，而不是启动新的浏览器
-# 开启后，程序会连接一个已经启用了远程调试的浏览器
-# 用户需要在 Chrome 中开启远程调试：chrome://inspect/#remote-debugging
-# 或者使用命令行参数启动 Chrome：--remote-debugging-port=9222
-# 这种方式反检测效果最好，因为直接使用用户真实浏览器的所有 Cookie、扩展和浏览历史
-CDP_CONNECT_EXISTING = False
-
-# 程序结束时是否自动关闭浏览器
-# 设置为 False 可以保持浏览器运行，方便调试
-AUTO_CLOSE_BROWSER = True
-
-
-def get_browser_channel() -> str | None:
-    """检测系统 Chrome 安装，找不到时返回 None 回退到 Playwright 自带 Chromium"""
-    import os as _os
-    import sys as _sys
-
-    if CUSTOM_BROWSER_PATH:
-        return None  # 自定义路径时不用 channel
-
-    chrome_paths = [
-        CUSTOM_BROWSER_PATH,  # 用户自定义
-        _os.path.join(_os.environ.get("LOCALAPPDATA", ""),
-                      "Google", "Chrome", "Application", "chrome.exe"),
-        _os.path.join(_os.environ.get("PROGRAMFILES", ""),
-                      "Google", "Chrome", "Application", "chrome.exe"),
-        _os.path.join(_os.environ.get("PROGRAMFILES(X86)", ""),
-                      "Google", "Chrome", "Application", "chrome.exe"),
-    ]
-
-    if _sys.platform == "darwin":
-        chrome_paths = [
-            CUSTOM_BROWSER_PATH,
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        ]
-    elif _sys.platform.startswith("linux"):
-        chrome_paths = [
-            CUSTOM_BROWSER_PATH,
-            "/usr/bin/google-chrome",
-            "/usr/bin/chromium-browser",
-        ]
-
-    for path in chrome_paths:
-        if path and _os.path.isfile(path):
-            return "chrome"
-
-    return None  # 回退到 Playwright 自带 Chromium
 
 # Data saving type option configuration, supports: csv, db, json, jsonl, sqlite, excel, postgres. It is best to save to DB, with deduplication function.
 SAVE_DATA_OPTION = "db"  # 平台默认 MySQL；csv/json/jsonl/sqlite/excel 仅兼容保留
