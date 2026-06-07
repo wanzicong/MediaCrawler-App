@@ -26,6 +26,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from ..schemas import CrawlerStartRequest, CrawlerStatusResponse
 from ..schemas.config_mgmt import TaskResponse
 from ..services import crawler_manager
+from tools._api_headers import INTERNAL_HEADERS
 
 router = APIRouter(prefix="/crawler", tags=["crawler"])
 DATA_API_URL = os.getenv("DATA_API_URL", "http://127.0.0.1:8080")
@@ -71,7 +72,7 @@ async def list_tasks(
         params["status"] = status
     if platform:
         params["platform"] = platform
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
         resp = await client.get(f"{DATA_API_URL}/api/internal/tasks", params=params)
         resp.raise_for_status()
         return resp.json()
@@ -79,7 +80,7 @@ async def list_tasks(
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
 async def get_task_detail(task_id: int):
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
         resp = await client.get(f"{DATA_API_URL}/api/internal/tasks/{task_id}")
         if resp.status_code == 404:
             raise HTTPException(status_code=404, detail="任务不存在")
@@ -102,7 +103,7 @@ async def execute_task(task_id: int):
 
 @router.post("/tasks/{task_id}/rerun")
 async def rerun_task(task_id: int, resume: bool = True):
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
         resp = await client.get(f"{DATA_API_URL}/api/internal/tasks/{task_id}")
         if resp.status_code == 404:
             raise HTTPException(status_code=404, detail="任务不存在")
@@ -159,7 +160,7 @@ async def rerun_task(task_id: int, resume: bool = True):
 async def delete_task(task_id: int):
     """删除任务记录"""
     # 先检查任务状态
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
         resp = await client.get(f"{DATA_API_URL}/api/internal/tasks/{task_id}")
         if resp.status_code == 404:
             raise HTTPException(status_code=404, detail="任务不存在")
@@ -169,7 +170,7 @@ async def delete_task(task_id: int):
     if task.get("status") == "running":
         raise HTTPException(status_code=400, detail="无法删除正在运行的任务，请先停止爬虫")
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
         resp = await client.delete(f"{DATA_API_URL}/api/internal/tasks/{task_id}")
         if resp.status_code == 404:
             raise HTTPException(status_code=404, detail="任务不存在")

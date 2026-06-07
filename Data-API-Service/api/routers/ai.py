@@ -87,7 +87,7 @@ def _tokenize_for_match(text: str) -> list[str]:
     """将文本拆分为可用于模糊匹配的 token 列表，同时支持中英文。"""
     tokens = []
     # 按标点/空白拆分，同时保留连续的中文字符段作为 token
-    parts = re.split(r'[，。！？、；：""''（）\s,\.!\?;:\"'']+', text.lower())
+    parts = re.split(r'[，。！？、；：“”‘’（）\s,\.!\?;:\"\']+', text.lower())
     for part in parts:
         part = part.strip()
         if not part:

@@ -32,7 +32,7 @@ pnpm dev:crawler    # 启动 Crawler-Service
 # 同时启动两个后端服务
 pnpm dev:api        # 并行启动 data-api + crawler
 
-# 前端开发服务器 (Vite, 端口 5173)
+# 前端开发服务器 (Vite, 端口 10001)
 pnpm dev:web        # 启动前端 dev server
 
 # 全部并行启动
@@ -66,12 +66,14 @@ cd Crawler-Service && uv run python -m pytest tests/test_store_factory.py -v
 
 ### 服务拆分
 
-项目已从单体 `MediaCrawler-Api/` 重构为两个独立服务，通过 HTTP 通信（零代码共享）：
+项目已从单体 `MediaCrawler-Api/` 重构为四个独立服务，通过 HTTP 通信（零代码共享）：
 
 | 服务 | 端口 | 职责 |
 |------|------|------|
-| **Data-API-Service** | 8080 | 数据库 CRUD、配置方案管理、关键词管理、AI 对话/评论分析、平台元数据、内部 API |
-| **Crawler-Service** | 8081 | 爬虫子进程管理、WebSocket 实时日志推送、爬虫控制 API、浏览器自动化引擎 |
+| **Data-API-Service** | 8080 | 数据库 CRUD、配置方案管理、关键词管理、AI 对话/评论分析、平台元数据、内部 API、收藏审阅 |
+| **Crawler-Service** | 8081 | 爬虫子进程管理（MAX_CONCURRENT=3）、WebSocket 实时日志推送、Pro 多任务调度、引擎层 |
+| **Browser-Service** | 9500 | Chrome/Edge 浏览器实例池管理、CDP 端口分配、健康检查与自动恢复 |
+| **Signer-Service** | 8082 | 小红书/抖音 API 请求签名 |
 
 ### 整体结构
 
@@ -117,7 +119,7 @@ MediaCrawler-App/
 │   ├── cache/                  # 缓存层 (本地/Redis)
 │   └── proxy/                  # 代理模块
 │
-├── MediaCrawler-Web/           # React 前端 (Vite, 端口 5173)
+├── MediaCrawler-Web/           # React 前端 (Vite, 端口 10001)
 │   └── src/
 │       ├── pages/              # Dashboard, Crawler, Data, Settings
 │       ├── api/                # axios API 调用层
@@ -177,7 +179,7 @@ Crawler-Service **全部通过 HTTP** 调用 Data-API-Service（`DATA_API_URL` �
 
 1. **配置系统**: `Crawler-Service/config/` 使用 Python module-level 变量而非 class。通过 `apply_crawler_payload()` 动态覆写。多进程场景下通过 `--task-id` 从 Data-API-Service 加载配置而非命令行参数传递。Data-API-Service 的 `config/` 只管理数据库连接配置。
 
-2. **任务调度**: `CrawlerManager` 是单例，同一时间只运行一个爬虫子进程。新任务在运行时自动排队（`_task_queue`），前一个完成后自动出队执行。使用 `asyncio.Lock` 防止竞态条件。
+2. **任务调度**: `CrawlerManager` 是单例，支持最多 3 个并发爬虫子进程（MAX_CONCURRENT=3），按平台限制并发（高风险平台 xhs/dy/ks=1）。新任务超出上限时自动排队（`_task_queue`），完成后自动出队。使用 `asyncio.Lock` 防止竞态条件。
 
 3. **数据库**: 所有 ORM 模型在 Data-API-Service 的 `database/` 中定义，系统表和业务表共用同一个 SQLAlchemy `Base`。Crawler-Service 不直接操作数据库，爬取数据通过 `POST /api/internal/data/batch` 写入。
 

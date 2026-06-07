@@ -3,12 +3,22 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
+
+# 内部 API 鉴权 token（默认值保证开发环境零配置）
+_INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "internal-dev-token")
+
+
+async def _verify_internal_token(x_api_token: str = Header(default="", alias="X-API-Token")):
+    """校验内部 API 调用方身份"""
+    if x_api_token != _INTERNAL_API_TOKEN:
+        raise HTTPException(status_code=403, detail="Forbidden: invalid internal API token")
 
 from database.db_session import get_mysql_session
 from database.system_models import CrawlerAccount, CrawlerTaskLog
@@ -38,7 +48,7 @@ from database.models import (
 )
 from services.config_service import ConfigService
 
-router = APIRouter(prefix="/api/internal", tags=["internal"])
+router = APIRouter(prefix="/api/internal", tags=["internal"], dependencies=[Depends(_verify_internal_token)])
 
 # ── platform + kind → ORM model 映射 ──────────────────────────────
 _MODEL_MAP: dict[tuple[str, str], Any] = {
@@ -153,14 +163,16 @@ async def batch_write_data(body: BatchDataRequest):
 
     try:
         from sqlalchemy.dialects.mysql import insert as mysql_insert
+        values_list = []
+        for rec in body.records:
+            rec.setdefault("task_id", body.task_id)
+            rec.setdefault("add_ts", now_ts)
+            rec.setdefault("last_modify_ts", now_ts)
+            values_list.append(rec)
         async with get_mysql_session() as session:
-            for rec in body.records:
-                rec.setdefault("task_id", body.task_id)
-                rec.setdefault("add_ts", now_ts)
-                rec.setdefault("last_modify_ts", now_ts)
-                stmt = mysql_insert(model).values(**rec).prefix_with("IGNORE")
-                await session.execute(stmt)
-                written += 1
+            stmt = mysql_insert(model).values(values_list).prefix_with("IGNORE")
+            result = await session.execute(stmt)
+            written = result.rowcount
         return {"written": written, "message": f"successfully wrote {written} records"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Batch write failed: {str(e)}")

@@ -43,6 +43,7 @@ from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
 from media_platform.zhihu import ZhihuCrawler
 from tools.async_file_writer import AsyncFileWriter
+from tools._api_headers import INTERNAL_HEADERS
 from var import crawler_type_var
 
 
@@ -157,7 +158,7 @@ async def main() -> None:
             status = "completed" if success else "failed"
             data_api_url = os.getenv("DATA_API_URL", "http://127.0.0.1:8080")
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
                     await client.put(
                         f"{data_api_url}/api/internal/tasks/{task_id}/finish",
                         json={"status": status, "error": error_msg or ""},

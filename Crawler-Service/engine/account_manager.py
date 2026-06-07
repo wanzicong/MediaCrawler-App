@@ -19,6 +19,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
+from tools._api_headers import INTERNAL_HEADERS
 
 DATA_API_URL = os.getenv("DATA_API_URL", "http://127.0.0.1:8080")
 
@@ -136,7 +137,7 @@ class AccountManager:
     async def load_accounts(self) -> int:
         """从 Data-API 加载平台账号列表"""
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
                 resp = await client.get(
                     f"{DATA_API_URL}/api/internal/accounts",
                     params={"platform": self.platform, "status": "active"},

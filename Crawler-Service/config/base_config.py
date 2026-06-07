@@ -67,6 +67,9 @@ CDP_HEADLESS = False
 # 支持通过环境变量 BROWSER_MODE 注入
 BROWSER_MODE = os.getenv("BROWSER_MODE", "auto")
 
+# 页面导航超时时间（秒）
+BROWSER_LAUNCH_TIMEOUT = 60
+
 # Data saving type option configuration, supports: csv, db, json, jsonl, sqlite, excel, postgres. It is best to save to DB, with deduplication function.
 SAVE_DATA_OPTION = "db"  # 平台默认 MySQL；csv/json/jsonl/sqlite/excel 仅兼容保留
 

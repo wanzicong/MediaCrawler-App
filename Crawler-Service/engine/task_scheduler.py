@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from .task_executor import TaskExecutor
+from tools._api_headers import INTERNAL_HEADERS
 
 DATA_API_URL = os.getenv("DATA_API_URL", "http://127.0.0.1:8080")
 
@@ -256,17 +257,13 @@ class TaskScheduler:
                 return
 
     async def _create_task_via_api(self, config: Dict[str, Any]) -> dict:
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(
-                    f"{DATA_API_URL}/api/internal/tasks",
-                    json={"payload": config, "profile_id": config.get("profile_id")},
-                )
-                resp.raise_for_status()
-                return resp.json()
-        except Exception:
-            fake_id = len(self._all_tasks) + 1
-            return {"task_id": fake_id}
+        async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
+            resp = await client.post(
+                f"{DATA_API_URL}/api/internal/tasks",
+                json={"payload": config, "profile_id": config.get("profile_id")},
+            )
+            resp.raise_for_status()
+            return resp.json()
 
 
 # 全局单例

@@ -15,6 +15,7 @@ from ..schemas import CrawlerStartRequest
 from engine.task_scheduler import scheduler, TaskPriority as TP
 from engine.checkpoint import CheckpointManager, CHECKPOINT_DIR
 from engine.account_manager import AccountManager
+from tools._api_headers import INTERNAL_HEADERS
 
 router = APIRouter(prefix="/crawler-pro", tags=["crawler-pro"])
 DATA_API_URL = os.getenv("DATA_API_URL", "http://127.0.0.1:8080")
@@ -63,7 +64,7 @@ async def shutdown_scheduler():
 @router.get("/checkpoint/{task_id}")
 async def get_checkpoint(task_id: int):
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
             resp = await client.get(f"{DATA_API_URL}/api/internal/tasks/{task_id}/checkpoint")
             if resp.status_code == 200:
                 return {"status": "ok", "task_id": task_id, "checkpoint": resp.json()}

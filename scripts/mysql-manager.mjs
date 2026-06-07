@@ -36,7 +36,7 @@ function syncEnv() {
     console.log('已创建根目录 .env');
   }
 
-  const mysqlBlock = `# MySQL（由根目录 pnpm db:sync-env 同步）
+  const mysqlBlock = `# MySQL（由 pnpm db:sync-env 同步）
 MYSQL_DB_PWD=123456
 MYSQL_DB_USER=root
 MYSQL_DB_HOST=127.0.0.1
@@ -81,7 +81,8 @@ async function waitHealthy(maxSeconds = 120) {
 }
 
 function generateSql() {
-  run('uv run python scripts/generate_tables_sql.py', { cwd: join(ROOT, 'MediaCrawler-Api') });
+  console.log('⚠️  此命令已废弃。数据库表由 Data-API-Service 启动时通过 ORM create_all 自动创建。');
+  console.log('   如需手动建表，请使用: cd Data-API-Service && uv run python -c "from database.db_session import create_tables; import asyncio; asyncio.run(create_tables())"');
 }
 
 const actions = {
@@ -126,8 +127,8 @@ MediaCrawler MySQL 管理 (Docker)
   pnpm db:logs         查看日志
   pnpm db:wait         等待健康检查
   pnpm db:status       容器状态
-  pnpm db:sync-env     同步 MediaCrawler-Api/.env
-  pnpm db:generate-sql 从 ORM 重新生成 sql/01_tables.sql
+  pnpm db:sync-env     同步 Data-API-Service/.env
+  pnpm db:generate-sql DB 表由 ORM create_all 自动管理
 
 账号: root / 123456  数据库: media_crawler
 `);

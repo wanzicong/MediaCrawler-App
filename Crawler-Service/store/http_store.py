@@ -6,6 +6,7 @@ from typing import Dict
 
 import httpx
 
+from tools._api_headers import INTERNAL_HEADERS
 from base.base_crawler import AbstractStore
 
 DATA_API_URL = os.getenv("DATA_API_URL", "http://127.0.0.1:8080")
@@ -21,7 +22,7 @@ class HttpStore(AbstractStore):
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=30.0)
+            self._client = httpx.AsyncClient(timeout=30.0, headers=INTERNAL_HEADERS)
         return self._client
 
     @staticmethod

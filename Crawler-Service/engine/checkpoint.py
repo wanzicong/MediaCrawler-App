@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 import httpx
+from tools._api_headers import INTERNAL_HEADERS
 
 DATA_API_URL = os.getenv("DATA_API_URL", "http://127.0.0.1:8080")
 CHECKPOINT_DIR = Path(os.getenv("CHECKPOINT_DIR", Path(__file__).parent.parent / "checkpoints"))
@@ -166,7 +167,7 @@ class CheckpointManager:
             pass
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
                 await client.put(
                     f"{DATA_API_URL}/api/internal/tasks/{self._task_id}/checkpoint",
                     json=data,
@@ -189,7 +190,7 @@ class CheckpointManager:
 
     async def _try_restore_remote(self) -> Optional[Checkpoint]:
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
                 resp = await client.get(
                     f"{DATA_API_URL}/api/internal/tasks/{self._task_id}/checkpoint"
                 )

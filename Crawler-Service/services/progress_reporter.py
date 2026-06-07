@@ -8,6 +8,7 @@ import os
 from typing import Optional
 
 import httpx
+from tools._api_headers import INTERNAL_HEADERS
 
 DATA_API_URL = os.getenv("DATA_API_URL", "http://127.0.0.1:8080")
 
@@ -54,7 +55,7 @@ class ProgressReporter:
             self._dirty = False
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
                 await client.put(
                     f"{DATA_API_URL}/api/internal/tasks/{self._task_id}/progress",
                     json={"progress": data.get("progress", 0), "message": data.get("message", "")},

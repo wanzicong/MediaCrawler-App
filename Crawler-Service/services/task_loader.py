@@ -8,13 +8,14 @@ import os
 import httpx
 
 from config.applier import apply_crawler_payload
+from tools._api_headers import INTERNAL_HEADERS
 
 DATA_API_URL = os.getenv("DATA_API_URL", "http://127.0.0.1:8080")
 
 
 async def apply_task_config(task_id: int) -> None:
     """从 Data API Service 获取任务配置并应用"""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, headers=INTERNAL_HEADERS) as client:
         resp = await client.get(f"{DATA_API_URL}/api/internal/tasks/{task_id}")
         resp.raise_for_status()
         task_data = resp.json()
@@ -23,7 +24,7 @@ async def apply_task_config(task_id: int) -> None:
     apply_crawler_payload(payload)
 
     # 标记任务开始执行（progress 端点首次调用会自动 pending→running）
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
         await client.put(
             f"{DATA_API_URL}/api/internal/tasks/{task_id}/progress",
             json={"progress": 0, "message": "任务开始执行"},

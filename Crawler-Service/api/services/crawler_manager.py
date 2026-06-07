@@ -17,6 +17,7 @@ from pathlib import Path
 import httpx
 
 from ..schemas import CrawlerStartRequest, LogEntry
+from tools._api_headers import INTERNAL_HEADERS
 
 DATA_API_URL = os.getenv("DATA_API_URL", "http://127.0.0.1:8080")
 
@@ -103,7 +104,7 @@ class CrawlerManager:
                 batch = self._db_log_buffer[:]
                 self._db_log_buffer.clear()
                 try:
-                    async with httpx.AsyncClient(timeout=5.0) as client:
+                    async with httpx.AsyncClient(timeout=5.0, headers=INTERNAL_HEADERS) as client:
                         await client.post(
                             f"{DATA_API_URL}/api/internal/logs/batch",
                             json={"logs": batch},
@@ -170,7 +171,7 @@ class CrawlerManager:
         base_payload = build_default_payload()
         if config.profile_id:
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
                     resp = await client.get(
                         f"{DATA_API_URL}/api/internal/profiles/{config.profile_id}"
                     )
@@ -188,7 +189,7 @@ class CrawlerManager:
                 overrides[k] = v.value
         payload = self._merge_payload(base_payload, overrides)
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
             resp = await client.post(
                 f"{DATA_API_URL}/api/internal/tasks",
                 json={"payload": payload, "profile_id": config.profile_id},
@@ -202,7 +203,7 @@ class CrawlerManager:
         if not keywords:
             return
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
                 await client.post(
                     f"{DATA_API_URL}/api/keywords/auto-record",
                     json={"platform": platform, "keywords": keywords, "task_id": task_id},
@@ -215,7 +216,7 @@ class CrawlerManager:
     ) -> None:
         final_status = status or ("completed" if success else "failed")
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
                 resp = await client.put(
                     f"{DATA_API_URL}/api/internal/tasks/{task_id}/finish",
                     json={"status": final_status, "error": error_message},
@@ -232,8 +233,13 @@ class CrawlerManager:
             await self._push_log(entry)
 
     def _make_subprocess_env(self, task_id: int, platform: str = "") -> dict:
-        """构建子进程环境变量（浏览器由 Browser-Service 管理，无需 CDP 端口）"""
-        return {**os.environ, "PYTHONUNBUFFERED": "1"}
+        """构建子进程环境变量（浏览器由 Browser-Service 管理）"""
+        import os as _os
+        return {
+            **os.environ,
+            "PYTHONUNBUFFERED": "1",
+            "INTERNAL_API_TOKEN": _os.getenv("INTERNAL_API_TOKEN", "internal-dev-token"),
+        }
 
     def _build_command(self, task_id: int) -> list:
         import sys as _sys
@@ -343,7 +349,7 @@ class CrawlerManager:
                 return {"started": False, "error": "另一个启动请求正在处理中"}
 
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
                     resp = await client.get(f"{DATA_API_URL}/api/internal/tasks/{task_id}")
                     if resp.status_code != 200:
                         return {"started": False, "error": f"任务 #{task_id} 不存在"}

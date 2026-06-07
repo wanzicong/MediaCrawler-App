@@ -29,14 +29,20 @@ pnpm dev:data-api   # 启动 Data-API-Service
 # 爬虫服务 (FastAPI, 端口 8081) — 爬虫控制、WebSocket 日志推送
 pnpm dev:crawler    # 启动 Crawler-Service
 
-# 同时启动两个后端服务
-pnpm dev:api        # 并行启动 data-api + crawler
+# 浏览器服务 (FastAPI, 端口 9500) — Chrome/Edge 实例池管理
+pnpm dev:browser     # 启动 Browser-Service
 
-# 前端开发服务器 (Vite, 端口 5173)
-pnpm dev:web        # 启动前端 dev server
+# 签名服务 (FastAPI, 端口 8082) — xhs/dy API 签名
+pnpm dev:signer      # 启动 Signer-Service
+
+# 同时启动四个后端服务
+pnpm dev:api         # 并行启动 data-api + crawler + browser + signer
+
+# 前端开发服务器 (Vite, 端口 10001)
+pnpm dev:web         # 启动前端 dev server
 
 # 全部并行启动
-pnpm dev            # 并行启动 data-api + crawler + web
+pnpm dev             # 并行启动 data-api + crawler + browser + signer + web
 
 # 爬虫命令行模式 (非 WebUI)
 cd Crawler-Service && uv run python main.py --help
@@ -44,7 +50,7 @@ cd Crawler-Service && uv run python main.py --platform xhs --keywords "关键词
 cd Crawler-Service && uv run python main.py --task-id <id>
 
 # 安装 Python 依赖
-pnpm install:api    # 即 cd Data-API-Service && uv sync && cd ../Crawler-Service && uv sync
+pnpm install:api    # 四个 Python 服务 uv sync (Data-API + Crawler + Browser + Signer)
 ```
 
 ### 构建与检查
@@ -70,8 +76,10 @@ cd Crawler-Service && uv run python -m pytest tests/test_store_factory.py -v
 
 | 服务 | 端口 | 职责 |
 |------|------|------|
-| **Data-API-Service** | 8080 | 数据库 CRUD、配置方案管理、关键词管理、AI 对话/评论分析、平台元数据、内部 API |
-| **Crawler-Service** | 8081 | 爬虫子进程管理、WebSocket 实时日志推送、爬虫控制 API、浏览器自动化引擎 |
+| **Data-API-Service** | 8080 | 数据库 CRUD、配置方案管理、关键词管理、AI 对话/评论分析、平台元数据、内部 API、收藏审阅 |
+| **Crawler-Service** | 8081 | 爬虫子进程管理（MAX_CONCURRENT=3）、WebSocket 实时日志推送、Pro 多任务调度 |
+| **Browser-Service** | 9500 | Chrome/Edge 浏览器实例池管理、CDP 端口分配、健康检查与自动恢复 |
+| **Signer-Service** | 8082 | 小红书/抖音 API 请求签名 |
 
 ### 整体结构
 
@@ -117,7 +125,7 @@ MediaCrawler-App/
 │   ├── cache/                  # 缓存层 (本地/Redis)
 │   └── proxy/                  # 代理模块
 │
-├── MediaCrawler-Web/           # React 前端 (Vite, 端口 5173)
+├── MediaCrawler-Web/           # React 前端 (Vite, 端口 10001)
 │   └── src/
 │       ├── pages/              # Dashboard, Crawler, Data, Settings
 │       ├── api/                # axios API 调用层
