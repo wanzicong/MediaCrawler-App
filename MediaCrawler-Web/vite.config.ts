@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: true,
-      port: 5173,
+      port: 10001,
       proxy: {
         '/api/crawler-pro': {
           target: crawlerTarget,

@@ -19,15 +19,12 @@
 
 
 import asyncio
-import os
 from asyncio import Task
 from typing import Dict, List, Optional, Tuple
 
 from playwright.async_api import (
     BrowserContext,
-    BrowserType,
     Page,
-    Playwright,
     async_playwright,
 )
 
@@ -605,93 +602,4 @@ class TieBaCrawler(AbstractCrawler):
         )
         return tieba_client
 
-    async def launch_browser(
-        self,
-        chromium: BrowserType,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-    ) -> BrowserContext:
-        """
-        Launch browser and create browser
-        Args:
-            chromium:
-            playwright_proxy:
-            user_agent:
-            headless:
-
-        Returns:
-
-        """
-        utils.logger.info(
-            "[BaiduTieBaCrawler.launch_browser] Begin create browser context ..."
-        )
-        if config.SAVE_LOGIN_STATE:
-            # feat issue #14
-            # we will save login state to avoid login every time
-            user_data_dir = os.path.join(
-                os.getcwd(), "browser_data", config.USER_DATA_DIR % config.PLATFORM
-            )  # type: ignore
-            browser_context = await chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                accept_downloads=True,
-                headless=headless,
-                proxy=playwright_proxy,  # type: ignore
-                viewport={"width": 1920, "height": 1080},
-                user_agent=user_agent,
-                channel=config.get_browser_channel(),  # Auto-detect Chrome, fallback to bundled Chromium
-            )
-            return browser_context
-        else:
-            browser = await chromium.launch(headless=headless, proxy=playwright_proxy, channel=config.get_browser_channel())  # type: ignore
-            browser_context = await browser.new_context(
-                viewport={"width": 1920, "height": 1080}, user_agent=user_agent
-            )
-            return browser_context
-
-    async def launch_browser_with_cdp(
-        self,
-        playwright: Playwright,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-    ) -> BrowserContext:
-        """
-        Launch browser using CDP mode
-        """
-        try:
-            self.cdp_manager = CDPBrowserManager()
-            browser_context = await self.cdp_manager.launch_and_connect(
-                playwright=playwright,
-                playwright_proxy=playwright_proxy,
-                user_agent=user_agent,
-                headless=headless,
-            )
-
-            # Display browser information
-            browser_info = await self.cdp_manager.get_browser_info()
-            utils.logger.info(f"[TieBaCrawler] CDP browser info: {browser_info}")
-
-            return browser_context
-
-        except Exception as e:
-            utils.logger.error(f"[TieBaCrawler] CDP mode launch failed, falling back to standard mode: {e}")
-            # Fall back to standard mode
-            chromium = playwright.chromium
-            return await self.launch_browser(
-                chromium, playwright_proxy, user_agent, headless
-            )
-
-    async def close(self):
-        """
-        Close browser context
-        Returns:
-
-        """
-        # If using CDP mode, need special handling
-        if self.cdp_manager:
-            await self.cdp_manager.cleanup()
-            self.cdp_manager = None
-        else:
-            await self.browser_context.close()
-        utils.logger.info("[BaiduTieBaCrawler.close] Browser context closed ...")
+    # launch_browser / launch_browser_with_cdp 由基类 AbstractCrawler 统一提供

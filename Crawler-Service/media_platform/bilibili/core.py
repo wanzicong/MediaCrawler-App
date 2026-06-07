@@ -32,12 +32,9 @@ import pandas as pd
 
 from playwright.async_api import (
     BrowserContext,
-    BrowserType,
     Page,
-    Playwright,
     async_playwright,
 )
-from playwright._impl._errors import TargetClosedError
 
 import config
 from base.base_crawler import AbstractCrawler
@@ -512,114 +509,7 @@ class BilibiliCrawler(AbstractCrawler):
         )
         return bilibili_client_obj
 
-    def _detect_browser_channel(self) -> str:
-        """Auto-detect available browser: Chrome or Edge"""
-        import platform
-        system = platform.system()
-        if system == "Windows":
-            chrome_paths = [
-                os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
-                os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
-                os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
-            ]
-            for p in chrome_paths:
-                if os.path.exists(p):
-                    return "chrome"
-            # Fallback to Edge
-            edge_paths = [
-                os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
-                os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
-            ]
-            for p in edge_paths:
-                if os.path.exists(p):
-                    return "msedge"
-        return "chrome"  # Default
-
-    async def launch_browser(
-        self,
-        chromium: BrowserType,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-    ) -> BrowserContext:
-        """
-        launch browser and create browser context
-        :param chromium: chromium browser
-        :param playwright_proxy: playwright proxy
-        :param user_agent: user agent
-        :param headless: headless mode
-        :return: browser context
-        """
-        browser_channel = self._detect_browser_channel()
-        utils.logger.info(f"[BilibiliCrawler.launch_browser] Using browser channel: {browser_channel}")
-        if config.SAVE_LOGIN_STATE:
-            # feat issue #14
-            # we will save login state to avoid login every time
-            user_data_dir = os.path.join(os.getcwd(), "browser_data", config.USER_DATA_DIR % config.PLATFORM)  # type: ignore
-            browser_context = await chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                accept_downloads=True,
-                headless=headless,
-                proxy=playwright_proxy,  # type: ignore
-                viewport={
-                    "width": 1920,
-                    "height": 1080
-                },
-                user_agent=user_agent,
-                channel=browser_channel,
-            )
-            return browser_context
-        else:
-            # type: ignore
-            browser = await chromium.launch(headless=headless, proxy=playwright_proxy, channel=config.get_browser_channel())
-            browser_context = await browser.new_context(viewport={"width": 1920, "height": 1080}, user_agent=user_agent)
-            return browser_context
-
-    async def launch_browser_with_cdp(
-        self,
-        playwright: Playwright,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-    ) -> BrowserContext:
-        """
-        Launch browser using CDP mode
-        """
-        try:
-            self.cdp_manager = CDPBrowserManager()
-            browser_context = await self.cdp_manager.launch_and_connect(
-                playwright=playwright,
-                playwright_proxy=playwright_proxy,
-                user_agent=user_agent,
-                headless=headless,
-            )
-
-            # Display browser information
-            browser_info = await self.cdp_manager.get_browser_info()
-            utils.logger.info(f"[BilibiliCrawler] CDP browser info: {browser_info}")
-
-            return browser_context
-
-        except Exception as e:
-            utils.logger.error(f"[BilibiliCrawler] CDP mode launch failed, fallback to standard mode: {e}")
-            # Fallback to standard mode
-            chromium = playwright.chromium
-            return await self.launch_browser(chromium, playwright_proxy, user_agent, headless)
-
-    async def close(self):
-        """Close browser context"""
-        try:
-            # If using CDP mode, special handling is required
-            if self.cdp_manager:
-                await self.cdp_manager.cleanup()
-                self.cdp_manager = None
-            elif self.browser_context:
-                await self.browser_context.close()
-            utils.logger.info("[BilibiliCrawler.close] Browser context closed ...")
-        except TargetClosedError:
-            utils.logger.warning("[BilibiliCrawler.close] Browser context was already closed.")
-        except Exception as e:
-            utils.logger.error(f"[BilibiliCrawler.close] An error occurred during close: {e}")
+    # launch_browser / launch_browser_with_cdp / close 由基类 AbstractCrawler 统一提供
 
     async def get_bilibili_video(self, video_item: Dict, semaphore: asyncio.Semaphore):
         """

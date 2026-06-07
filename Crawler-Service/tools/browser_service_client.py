@@ -247,16 +247,12 @@ class BrowserServiceClient:
             ) from e
 
         data = resp.json()
-        if not data.get("success"):
-            error_msg = data.get("error", "Unknown error")
-            raise RuntimeError(
-                f"Browser-Service rejected instance creation: {error_msg}"
-            )
-
-        instance = data.get("instance", {})
+        # Browser-Service 直接返回实例数据（无 success/instance 包装）
+        # 响应格式: {instance_id, debug_port, ws_url, status, browser_name, platform_name}
+        instance = data
         utils.logger.info(
             f"[BrowserServiceClient] Browser instance created: "
-            f"id={instance.get('instance_id')}, port={instance.get('cdp_port')}"
+            f"id={instance.get('instance_id')}, port={instance.get('debug_port')}"
         )
         return instance
 
@@ -280,13 +276,12 @@ class BrowserServiceClient:
         path = self.API_DELETE_INSTANCE.format(instance_id=instance_id)
         try:
             resp = await self._request("DELETE", path)
-            data = resp.json()
-            success = data.get("success", False)
+            # Browser-Service 删除成功返回 HTTP 200 + MessageResponse
+            # raise_for_status() 已保证 HTTP 成功，此时即可认为删除成功
             utils.logger.info(
-                f"[BrowserServiceClient] Browser instance {instance_id} "
-                f"{'deleted' if success else 'deletion failed'}"
+                f"[BrowserServiceClient] Browser instance {instance_id} deleted"
             )
-            return success
+            return True
         except httpx.RequestError as e:
             utils.logger.warning(
                 f"[BrowserServiceClient] Failed to delete instance {instance_id}: {e}"
@@ -461,12 +456,12 @@ class BrowserServiceClient:
         )
 
         self._instance_id = instance["instance_id"]
-        self._cdp_port = instance["cdp_port"]
+        self._cdp_port = instance["debug_port"]  # Browser-Service 使用 debug_port
 
         # 从 base_url 提取主机名, 用于构造 CDP URL
         # 在 Docker 网络中主机名如 "browser-service", 本地开发环境为 "localhost"
         default_cdp_host = urlparse(self._base_url).hostname or "localhost"
-        cdp_url = instance.get("cdp_url", f"http://{default_cdp_host}:{self._cdp_port}")
+        cdp_url = instance.get("ws_url", f"http://{default_cdp_host}:{self._cdp_port}")
 
         utils.logger.info(
             f"[BrowserServiceClient] Connecting to remote browser via CDP: {cdp_url}"
@@ -690,13 +685,24 @@ class BrowserServiceClient:
 
         # 3. 如果是 Browser-Service 模式, 通知销毁实例
         if self._instance_id:
-            await self.delete_instance()
-            self._instance_id = None
-            self._cdp_port = None
+            try:
+                await self.delete_instance()
+            except Exception as e:
+                utils.logger.warning(
+                    f"[BrowserServiceClient] Failed to delete remote instance: {e}"
+                )
+            finally:
+                self._instance_id = None
+                self._cdp_port = None
 
         # 4. 如果是本地 CDPBrowserManager 模式, 委派清理
         if self._local_manager:
-            await self._local_manager.cleanup(force=force)
+            try:
+                await self._local_manager.cleanup(force=force)
+            except Exception as e:
+                utils.logger.warning(
+                    f"[BrowserServiceClient] Failed to cleanup local manager: {e}"
+                )
 
     # ------------------------------------------------------------------
     # 上下文管理器支持

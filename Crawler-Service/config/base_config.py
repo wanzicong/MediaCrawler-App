@@ -71,6 +71,14 @@ CUSTOM_BROWSER_PATH = ""
 # 注意：即使设置为 True，某些反检测功能在无头模式下可能无法正常工作
 CDP_HEADLESS = False
 
+# ==================== Browser-Service 集成配置 ====================
+# 浏览器管理模式，控制爬虫如何获取和管理浏览器实例
+# - "auto" (默认):   优先使用 Browser-Service 远程浏览器池，不可用时自动回退本地 CDP
+# - "remote":        强制使用 Browser-Service（适用于生产环境，需要先启动 Browser-Service）
+# - "local":         强制使用本地 CDP 模式（适用于开发环境，不依赖 Browser-Service）
+# 支持通过环境变量 BROWSER_MODE 注入
+BROWSER_MODE = os.getenv("BROWSER_MODE", "auto")
+
 # 浏览器启动超时时间（秒）
 BROWSER_LAUNCH_TIMEOUT = 60
 

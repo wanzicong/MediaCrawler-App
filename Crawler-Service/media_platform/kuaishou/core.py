@@ -335,72 +335,7 @@ class KuaishouCrawler(AbstractCrawler):
         )
         return ks_client_obj
 
-    async def launch_browser(
-        self,
-        chromium: BrowserType,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-    ) -> BrowserContext:
-        """Launch browser and create browser context"""
-        utils.logger.info(
-            "[KuaishouCrawler.launch_browser] Begin create browser context ..."
-        )
-        if config.SAVE_LOGIN_STATE:
-            user_data_dir = os.path.join(
-                os.getcwd(), "browser_data", config.USER_DATA_DIR % config.PLATFORM
-            )  # type: ignore
-            browser_context = await chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                accept_downloads=True,
-                headless=headless,
-                proxy=playwright_proxy,  # type: ignore
-                viewport={"width": 1920, "height": 1080},
-                user_agent=user_agent,
-                channel=config.get_browser_channel(),  # Auto-detect Chrome, fallback to bundled Chromium
-            )
-            return browser_context
-        else:
-            browser = await chromium.launch(headless=headless, proxy=playwright_proxy, channel=config.get_browser_channel())  # type: ignore
-            browser_context = await browser.new_context(
-                viewport={"width": 1920, "height": 1080}, user_agent=user_agent
-            )
-            return browser_context
-
-    async def launch_browser_with_cdp(
-        self,
-        playwright: Playwright,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-    ) -> BrowserContext:
-        """
-        Launch browser using CDP mode
-        """
-        try:
-            self.cdp_manager = CDPBrowserManager()
-            browser_context = await self.cdp_manager.launch_and_connect(
-                playwright=playwright,
-                playwright_proxy=playwright_proxy,
-                user_agent=user_agent,
-                headless=headless,
-            )
-
-            # Display browser information
-            browser_info = await self.cdp_manager.get_browser_info()
-            utils.logger.info(f"[KuaishouCrawler] CDP browser info: {browser_info}")
-
-            return browser_context
-
-        except Exception as e:
-            utils.logger.error(
-                f"[KuaishouCrawler] CDP mode launch failed, fallback to standard mode: {e}"
-            )
-            # Fallback to standard mode
-            chromium = playwright.chromium
-            return await self.launch_browser(
-                chromium, playwright_proxy, user_agent, headless
-            )
+    # launch_browser / launch_browser_with_cdp 由基类 AbstractCrawler 统一提供
 
     async def get_creators_and_videos(self) -> None:
         """Get creator's videos and retrieve their comment information."""
@@ -449,12 +384,4 @@ class KuaishouCrawler(AbstractCrawler):
             if video_detail is not None:
                 await kuaishou_store.update_kuaishou_video(video_detail)
 
-    async def close(self):
-        """Close browser context"""
-        # If using CDP mode, need special handling
-        if self.cdp_manager:
-            await self.cdp_manager.cleanup()
-            self.cdp_manager = None
-        else:
-            await self.browser_context.close()
-        utils.logger.info("[KuaishouCrawler.close] Browser context closed ...")
+    # close 由基类 AbstractCrawler 统一提供

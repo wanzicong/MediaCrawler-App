@@ -135,6 +135,10 @@ async def main() -> None:
 
         _flush_excel_if_needed()
         await _generate_wordcloud_if_needed()
+    except asyncio.CancelledError:
+        success = False
+        error_msg = "Task cancelled by user"
+        raise
     except Exception as e:
         success = False
         error_msg = str(e)
@@ -158,28 +162,22 @@ async def main() -> None:
                         f"{data_api_url}/api/internal/tasks/{task_id}/finish",
                         json={"status": status, "error": error_msg or ""},
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[Main] Failed to report task finish status to Data-API: {e}")
 
 
 async def async_cleanup() -> None:
     global crawler
     if crawler:
-        if getattr(crawler, "cdp_manager", None):
+        # 使用基类 AbstractCrawler 的统一 close() 方法
+        # 自动处理 Browser-Service 远程模式 / 本地 CDP 模式 / 标准模式
+        if hasattr(crawler, "close"):
             try:
-                await crawler.cdp_manager.cleanup(force=True)
+                await crawler.close()
             except Exception as e:
                 error_msg = str(e).lower()
                 if "closed" not in error_msg and "disconnected" not in error_msg:
-                    print(f"[Main] Error cleaning up CDP browser: {e}")
-
-        elif getattr(crawler, "browser_context", None):
-            try:
-                await crawler.browser_context.close()
-            except Exception as e:
-                error_msg = str(e).lower()
-                if "closed" not in error_msg and "disconnected" not in error_msg:
-                    print(f"[Main] Error closing browser context: {e}")
+                    print(f"[Main] Error during crawler cleanup: {e}")
 
 if __name__ == "__main__":
     from tools.app_runner import run
