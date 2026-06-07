@@ -72,7 +72,7 @@ cd Crawler-Service && uv run python -m pytest tests/test_store_factory.py -v
 
 ### 服务拆分
 
-项目已从单体 `MediaCrawler-Api/` 重构为两个独立服务，通过 HTTP 通信（零代码共享）：
+项目已从单体 `MediaCrawler-Api/` 重构为四个后端服务 + 前端，通过 HTTP 通信（零代码共享）：
 
 | 服务 | 端口 | 职责 |
 |------|------|------|
@@ -142,9 +142,10 @@ MediaCrawler-App/
 前端开发服务器根据路径前缀将请求分发到不同后端：
 
 ```
-/api/crawler  → Crawler-Service (8081)    # 爬虫控制
-/api/ws       → Crawler-Service (8081)    # WebSocket
-/api          → Data-API-Service (8080)   # 数据/AI/配置/关键词
+/api/crawler-pro → Crawler-Service (8081) # Pro 多任务调度
+/api/crawler     → Crawler-Service (8081) # 经典爬虫控制
+/api/ws          → Crawler-Service (8081) # WebSocket
+/api             → Data-API-Service (8080) # 数据/AI/配置/关键词
 ```
 
 ### 核心数据流 (WebUI 启动爬虫)
@@ -185,7 +186,7 @@ Crawler-Service **全部通过 HTTP** 调用 Data-API-Service（`DATA_API_URL` �
 
 1. **配置系统**: `Crawler-Service/config/` 使用 Python module-level 变量而非 class。通过 `apply_crawler_payload()` 动态覆写。多进程场景下通过 `--task-id` 从 Data-API-Service 加载配置而非命令行参数传递。Data-API-Service 的 `config/` 只管理数据库连接配置。
 
-2. **任务调度**: `CrawlerManager` 是单例，同一时间只运行一个爬虫子进程。新任务在运行时自动排队（`_task_queue`），前一个完成后自动出队执行。使用 `asyncio.Lock` 防止竞态条件。
+2. **任务调度**: 双轨并存 — `CrawlerManager`（经典 `/api/crawler/*`，子进程，MAX_CONCURRENT=3）与 `TaskScheduler`（Pro `/api/crawler-pro/*`，进程内 asyncio）。`/api/crawler/status` 与 `/ws/status` 通过 `status_aggregator` 聚合两路状态。
 
 3. **数据库**: 所有 ORM 模型在 Data-API-Service 的 `database/` 中定义，系统表和业务表共用同一个 SQLAlchemy `Base`。Crawler-Service 不直接操作数据库，爬取数据通过 `POST /api/internal/data/batch` 写入。
 

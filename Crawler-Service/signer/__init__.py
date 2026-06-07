@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 SIGNER_URL = os.getenv("SIGNER_SERVICE_URL", "http://127.0.0.1:8082")
+SIGNER_FAIL_FAST = os.getenv("SIGNER_FAIL_FAST", "false").lower() in ("1", "true", "yes")
 
 
 class SignerClient:
@@ -48,8 +49,10 @@ class SignerClient:
                 resp = await client.post(f"{self.base_url}/api/sign", json=payload)
                 resp.raise_for_status()
                 return resp.json()
-        except httpx.ConnectError:
-            # 签名服务不可用时返回空签名 (降级模式)
+        except httpx.ConnectError as e:
+            if SIGNER_FAIL_FAST:
+                raise RuntimeError(f"Signer service unavailable at {self.base_url}") from e
+            print(f"[SignerClient] 签名服务不可用，降级为空签名 ({platform}/{sign_type})")
             return {
                 "platform": platform,
                 "sign_type": sign_type,
@@ -58,8 +61,11 @@ class SignerClient:
                 "headers": headers or {},
                 "cookies": cookies or {},
                 "extra": {},
+                "degraded": True,
             }
         except Exception as e:
+            if SIGNER_FAIL_FAST:
+                raise
             print(f"[SignerClient] 签名失败 ({platform}/{sign_type}): {e}")
             return {
                 "platform": platform,
@@ -69,6 +75,7 @@ class SignerClient:
                 "headers": headers or {},
                 "cookies": cookies or {},
                 "error": str(e),
+                "degraded": True,
             }
 
     async def sign_batch(self, requests: list[Dict[str, Any]]) -> list[Dict[str, Any]]:

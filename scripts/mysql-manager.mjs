@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * MySQL Docker 管理（根目录执行）
- * 用法: node scripts/mysql-manager.mjs <up|down|reset|logs|wait|status|sync-env|generate-sql>
+ * 用法: node scripts/mysql-manager.mjs <up|down|reset|logs|wait|status|sync-env|init|generate-sql>
  */
 import { execSync, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -36,7 +36,7 @@ function syncEnv() {
     console.log('已创建根目录 .env');
   }
 
-  const mysqlBlock = `# MySQL（由 pnpm db:sync-env 同步）
+  const mysqlBlock = `# MySQL（由根目录 pnpm db:sync-env 同步）
 MYSQL_DB_PWD=123456
 MYSQL_DB_USER=root
 MYSQL_DB_HOST=127.0.0.1
@@ -80,9 +80,13 @@ async function waitHealthy(maxSeconds = 120) {
   return false;
 }
 
+function initDatabase() {
+  run('uv run python scripts/init_database.py', { cwd: join(ROOT, 'Data-API-Service') });
+}
+
 function generateSql() {
-  console.log('⚠️  此命令已废弃。数据库表由 Data-API-Service 启动时通过 ORM create_all 自动创建。');
-  console.log('   如需手动建表，请使用: cd Data-API-Service && uv run python -c "from database.db_session import create_tables; import asyncio; asyncio.run(create_tables())"');
+  console.log('⚠️  此命令已废弃。请使用 pnpm db:init（ORM create_all + sync_schema）。');
+  console.log('   历史 SQL 快照见 sql/legacy/');
 }
 
 const actions = {
@@ -91,6 +95,11 @@ const actions = {
     compose('up -d');
     if (await waitHealthy()) {
       console.log('\n连接: mysql -h127.0.0.1 -P3306 -uroot -p123456 media_crawler');
+      try {
+        initDatabase();
+      } catch (e) {
+        console.warn('\n⚠️  自动建表失败（可稍后手动执行 pnpm db:init）:', e.message || e);
+      }
     }
   },
   down() {
@@ -100,8 +109,10 @@ const actions = {
     compose('down -v');
     syncEnv();
     compose('up -d');
-    await waitHealthy();
-    console.log('\n已清空数据卷并重新执行 sql/ 初始化脚本');
+    if (await waitHealthy()) {
+      initDatabase();
+      console.log('\n已清空数据卷并通过 ORM 重新初始化数据库');
+    }
   },
   logs() {
     compose('logs -f mysql');
@@ -116,19 +127,21 @@ const actions = {
     });
   },
   'sync-env': syncEnv,
+  init: initDatabase,
   'generate-sql': generateSql,
   help() {
     console.log(`
 MediaCrawler MySQL 管理 (Docker)
 
-  pnpm db:up           启动 MySQL 并同步 .env
+  pnpm db:up           启动 MySQL、同步 .env、ORM 建表
   pnpm db:down         停止容器
-  pnpm db:reset        删除数据卷并重新初始化（会重跑 sql/）
+  pnpm db:reset        删除数据卷并通过 ORM 重新初始化
   pnpm db:logs         查看日志
   pnpm db:wait         等待健康检查
   pnpm db:status       容器状态
   pnpm db:sync-env     同步 Data-API-Service/.env
-  pnpm db:generate-sql DB 表由 ORM create_all 自动管理
+  pnpm db:init         ORM 建表 + 补齐列 + 种子默认方案
+  pnpm db:generate-sql 已废弃，见 sql/README.md
 
 账号: root / 123456  数据库: media_crawler
 `);

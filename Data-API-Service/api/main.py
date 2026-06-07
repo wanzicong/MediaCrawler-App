@@ -41,9 +41,31 @@ from .routers import (
 
 load_dotenv()
 
+_DEFAULT_INTERNAL_TOKEN = "internal-dev-token"
+
+
+def _warn_insecure_internal_token() -> None:
+    import os
+    import logging
+
+    token = os.getenv("INTERNAL_API_TOKEN", _DEFAULT_INTERNAL_TOKEN)
+    if token == _DEFAULT_INTERNAL_TOKEN:
+        logging.getLogger("uvicorn.error").warning(
+            "[Security] INTERNAL_API_TOKEN 使用默认值，生产环境请务必修改"
+        )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _warn_insecure_internal_token()
+
+    try:
+        from scripts.init_database import init_database
+
+        await init_database()
+    except Exception:
+        pass
+
     try:
         from services.config_service import ConfigService
 

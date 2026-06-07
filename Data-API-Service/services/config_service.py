@@ -46,10 +46,9 @@ class ConfigService:
         }
     @staticmethod
     async def init_database() -> dict[str, str]:
-        from database.db_session import create_tables
+        from scripts.init_database import init_database as run_init
 
-        await create_tables("db")
-        await ConfigService.ensure_default_profile()
+        await run_init()
         return {"message": "数据库与系统表初始化完成"}
 
     @staticmethod

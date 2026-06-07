@@ -10,9 +10,7 @@
 - **反检测** — CDP 协议控制真实 Chrome/Edge 浏览器，模拟真人操作
 - **Web 控制台** — React 前端，实时日志、任务管理、数据查询
 - **AI 对话** — 集成 DeepSeek，支持会话管理 + 记忆管理
-- **AI 评论分析** — 一键分析评论情感、关键观点、热点话题
-- **AI 关键词裂变** — 输入种子词自动生成长尾词/相关词/问句词
-- **关键词管理** — 分组管理、批量导入、直接关联爬虫任务
+- **多任务并发** — 经典子进程模式 + Pro 进程内调度，最多 3 并发
 - **配置方案** — 可复用的爬虫配置预设，一键切换
 
 ## 技术栈
@@ -22,93 +20,91 @@
 | 后端框架 | FastAPI + Uvicorn |
 | 浏览器自动化 | Playwright + CDP |
 | 数据库 | MySQL 8.0 + SQLAlchemy (async) |
-| 前端 | React 18 + TypeScript + Vite |
+| 前端 | React 18 + TypeScript + Vite (端口 10001) |
 | UI 组件 | Ant Design 5 |
-| 状态管理 | Zustand + TanStack React Query |
-| AI | DeepSeek API |
 | 包管理 | pnpm (monorepo) |
+
+## 服务架构
+
+| 服务 | 端口 | 职责 |
+|------|------|------|
+| Data-API-Service | 8080 | 数据库、配置、AI、内部 API |
+| Crawler-Service | 8081 | 爬虫控制、WebSocket、引擎 |
+| Browser-Service | 9500 | Chrome/Edge 实例池 |
+| Signer-Service | 8082 | xhs/dy 签名 |
+| MediaCrawler-Web | 10001 | React 控制台 |
 
 ## 快速开始
 
 ### 1. 环境要求
 
-- Python 3.11+
-- Node.js 18+ & pnpm
-- Docker Desktop（运行 MySQL）
+- Python 3.11+、uv
+- Node.js 18+ & pnpm 9+
+- Docker Desktop（MySQL + Redis）
 - Chrome 或 Edge 浏览器
 
-### 2. 启动 MySQL
+### 2. 启动基础设施
 
 ```bash
-pnpm db:up
+pnpm db:up    # 启动 MySQL + Redis，自动 ORM 建表
 ```
 
-MySQL 默认配置：`root / 123456`，数据库 `media_crawler`，端口 `3306`
+MySQL：`root / 123456`，数据库 `media_crawler`，端口 `3306`
 
 ### 3. 安装依赖
 
 ```bash
 pnpm install        # 前端依赖
-pnpm install:api    # Python 依赖 (uv sync)
+pnpm install:api    # 四个 Python 服务 uv sync
 ```
 
-### 4. 配置 AI (可选)
+### 4. 配置环境变量
 
-在 `MediaCrawler-Api/.env` 中设置：
+复制根目录 `.env.example` 为 `.env`，至少配置：
 
 ```env
-DEEPSEEK_API_KEY=你的DeepSeek_API_Key
+INTERNAL_API_TOKEN=请改为强随机值
+DEEPSEEK_API_KEY=你的Key（可选）
+SIGNER_FAIL_FAST=false   # 生产建议 true
 ```
 
 ### 5. 启动开发服务
 
 ```bash
-pnpm dev            # 并行启动 API (8080) + 前端 (5173)
+pnpm dev    # 并行启动 4 后端 + 前端
 ```
 
-打开浏览器访问 `http://localhost:5173`
+打开 `http://localhost:10001`
 
 ## 项目结构
 
 ```
 MediaCrawler-App/
-├── MediaCrawler-Api/          # Python 后端
-│   ├── main.py                # CLI 爬虫入口
-│   ├── api/                   # FastAPI WebUI 层
-│   │   ├── routers/           # REST API 路由
-│   │   └── services/          # 爬虫管理器、WebSocket
-│   ├── media_platform/        # 各平台爬虫实现
-│   ├── config/                # 全局配置模块
-│   ├── database/              # SQLAlchemy ORM 模型
-│   ├── store/                 # 数据存储层
-│   └── services/              # 后端服务层
-├── MediaCrawler-Web/          # React 前端
-│   └── src/
-│       ├── pages/             # 页面组件
-│       ├── api/               # API 调用层
-│       ├── hooks/             # 自定义 Hooks
-│       ├── stores/            # Zustand 状态管理
-│       └── router/            # 路由配置
-├── sql/                       # 数据库初始化 SQL
-├── scripts/                   # 工具脚本
-└── docker-compose.yml         # MySQL 容器定义
+├── Data-API-Service/     # 数据 & 配置中心 (8080)
+├── Crawler-Service/      # 爬虫引擎 (8081)
+├── Browser-Service/      # 浏览器池 (9500)
+├── Signer-Service/       # 签名服务 (8082)
+├── MediaCrawler-Web/     # React 前端 (10001)
+├── sql/                  # Docker 仅初始化数据库（表由 ORM 管理）
+└── scripts/              # MySQL 管理脚本
 ```
 
-## 命令行使用
+## 常用命令
 
 ```bash
-cd MediaCrawler-Api
+pnpm dev              # 全部服务
+pnpm dev:api          # 仅后端
+pnpm db:init          # 手动 ORM 建表 + 补齐列
+pnpm db:reset         # 清空数据卷并重新初始化
 
-# 小红书关键词搜索
+# 命令行爬虫
+cd Crawler-Service
 uv run python main.py --platform xhs --keywords "关键词" --crawler-type search
-
-# 抖音关键词搜索
-uv run python main.py --platform dy --keywords "关键词" --crawler-type search
-
-# 指定帖子详情抓取
-uv run python main.py --platform xhs --crawler-type detail --specified-ids "帖子ID1,帖子ID2"
 ```
 
-## License
+## 生产部署检查清单
 
-MIT
+- [ ] 修改 `INTERNAL_API_TOKEN` 为强随机值
+- [ ] 设置 `SIGNER_FAIL_FAST=true`
+- [ ] 修改 MySQL/Redis 默认密码
+- [ ] 配置反向代理（/api → 8080，/api/crawler → 8081）

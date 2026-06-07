@@ -23,6 +23,7 @@
     "db:wait": "node scripts/mysql-manager.mjs wait",
     "db:status": "node scripts/mysql-manager.mjs status",
     "db:sync-env": "node scripts/mysql-manager.mjs sync-env",
+    "db:init": "node scripts/mysql-manager.mjs init",
     "db:generate-sql": "node scripts/mysql-manager.mjs generate-sql"
   },
   "engines": {

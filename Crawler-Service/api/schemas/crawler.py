@@ -17,7 +17,7 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 from enum import Enum
-from typing import Optional, Literal
+from typing import Any, Optional, Literal
 from pydantic import BaseModel
 
 
@@ -87,6 +87,7 @@ class RunningTaskInfo(BaseModel):
     crawler_type: Optional[str] = None
     started_at: Optional[str] = None
     status: str = "running"
+    source: Optional[str] = None
 
 
 class CrawlerStatusResponse(BaseModel):
@@ -101,6 +102,7 @@ class CrawlerStatusResponse(BaseModel):
     running_count: int = 0
     max_concurrent: int = 3
     running_tasks: list[RunningTaskInfo] = []
+    schedulers: Optional[dict[str, Any]] = None
 
 
 class LogEntry(BaseModel):

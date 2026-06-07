@@ -253,9 +253,6 @@ async def finish_task(task_id: int, body: TaskFinishRequest):
 
 # ── Pro: 断点续爬 & 多账号 ──────────────────────────────────────
 
-# 内存中的 checkpoint 存储（本地文件为主，远程为辅）
-_checkpoint_store: dict[str, dict] = {}
-
 
 class CheckpointData(BaseModel):
     task_id: int
@@ -275,25 +272,16 @@ class CheckpointData(BaseModel):
 
 @router.get("/tasks/{task_id}/checkpoint")
 async def get_task_checkpoint(task_id: int):
-    """获取任务断点数据"""
-    key = str(task_id)
-    if key in _checkpoint_store:
-        return _checkpoint_store[key]
-    # 也尝试从 CrawlerTask.progress 字段读取
+    """获取任务断点数据（持久化在 CrawlerTask.progress）"""
     task = await ConfigService.get_task(task_id)
     if task and task.get("progress") and isinstance(task["progress"], dict):
-        cp = task["progress"]
-        if cp.get("status") == "running":
-            _checkpoint_store[key] = cp
-            return cp
+        return task["progress"]
     return {}
 
 
 @router.put("/tasks/{task_id}/checkpoint")
 async def save_task_checkpoint(task_id: int, body: dict):
-    """保存任务断点数据"""
-    _checkpoint_store[str(task_id)] = body
-    # 同时写入 CrawlerTask.progress 字段做持久化
+    """保存任务断点数据到 CrawlerTask.progress"""
     await ConfigService.update_task_progress(task_id, body)
     return {"status": "ok", "task_id": task_id}
 

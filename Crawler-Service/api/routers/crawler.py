@@ -26,6 +26,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from ..schemas import CrawlerStartRequest, CrawlerStatusResponse
 from ..schemas.config_mgmt import TaskResponse
 from ..services import crawler_manager
+from ..services.status_aggregator import get_combined_status
 from tools._api_headers import INTERNAL_HEADERS
 
 router = APIRouter(prefix="/crawler", tags=["crawler"])
@@ -190,7 +191,7 @@ async def stop_crawler(task_id: Optional[int] = Body(None, embed=True)):
 @router.get("/status", response_model=CrawlerStatusResponse)
 async def get_crawler_status():
     """Get crawler status (includes running_tasks list for multi-task)"""
-    return crawler_manager.get_status()
+    return get_combined_status()
 
 
 @router.get("/logs")

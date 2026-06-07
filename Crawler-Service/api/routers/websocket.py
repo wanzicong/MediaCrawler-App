@@ -22,6 +22,7 @@ from typing import Set, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..services import crawler_manager
+from ..services.status_aggregator import get_combined_status
 
 router = APIRouter(tags=["websocket"])
 
@@ -162,7 +163,7 @@ async def websocket_status(websocket: WebSocket):
     try:
         while True:
             # Send status every second
-            status = crawler_manager.get_status()
+            status = get_combined_status()
             await websocket.send_json(status)
             await asyncio.sleep(1)
     except WebSocketDisconnect:

@@ -4,16 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-MediaCrawler 是一个多平台自媒体数据采集工具，支持小红书、抖音、快手、B站、微博、贴吧、知乎。基于 Playwright 浏览器自动化，通过 CDP 协议控制真实浏览器实现反检测。项目是 pnpm monorepo，包含 Python 后端（两个服务）和 React 前端。
+MediaCrawler 是一个多平台自媒体数据采集工具，支持小红书、抖音、快手、B站、微博、贴吧、知乎。基于 Playwright 浏览器自动化，通过 CDP 协议控制真实浏览器实现反检测。项目是 pnpm monorepo，包含 4 个 Python 后端服务 + React 前端（端口 10001）。
 
 ## 常用命令
 
 ### 基础设施
 
 ```bash
-pnpm db:up          # 启动 MySQL Docker 容器 + 同步 .env
+pnpm db:up          # 启动 MySQL + 同步 .env + ORM 自动建表
 pnpm db:down        # 停止 MySQL
-pnpm db:reset       # 清空数据卷并重新初始化数据库
+pnpm db:reset       # 清空数据卷并通过 ORM 重新初始化
+pnpm db:init        # 手动 ORM 建表 + 补齐列 + 种子默认方案
 pnpm db:status      # 查看 MySQL 容器状态
 pnpm db:sync-env    # 同步数据库配置到各服务 .env 文件
 ```
