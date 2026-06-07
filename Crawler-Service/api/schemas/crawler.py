@@ -71,7 +71,7 @@ class CrawlerStartRequest(BaseModel):
     enable_sub_comments: bool = False
     save_option: SaveDataOptionEnum = SaveDataOptionEnum.DB
     cookies: str = ""
-    headless: bool = False
+    headless: bool = True
     enable_cdp_mode: bool = True
     crawler_max_notes_count: int | None = None
     crawler_max_sleep_sec: int | None = None

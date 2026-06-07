@@ -87,5 +87,5 @@ export function fetchTaskLogs(taskId: number, params?: {
   if (params?.page) q.set('page', String(params.page));
   if (params?.page_size) q.set('page_size', String(params.page_size));
   const qs = q.toString();
-  return httpGet<TaskLogsResponse>(`/api/internal/tasks/${taskId}/logs${qs ? `?${qs}` : ''}`);
+  return httpGet<TaskLogsResponse>(`/api/crawler/tasks/${taskId}/logs${qs ? `?${qs}` : ''}`);
 }

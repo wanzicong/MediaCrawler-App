@@ -33,9 +33,9 @@ class CrawlerPayloadSchema(BaseModel):
     enable_sub_comments: bool = False
     save_option: str = "db"
     cookies: str = ""
-    headless: bool = False
+    headless: bool = True
     enable_cdp_mode: bool = True
-    cdp_headless: bool = False
+    cdp_headless: bool = True
     enable_ip_proxy: bool = False
     ip_proxy_pool_count: int = 2
     ip_proxy_provider_name: str = "kuaidaili"

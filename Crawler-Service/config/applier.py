@@ -24,7 +24,7 @@ def apply_crawler_payload(payload: dict[str, Any]) -> None:
     config.SAVE_DATA_OPTION = "db"
     config.COOKIES = payload.get("cookies", config.COOKIES)
     config.HEADLESS = bool(payload.get("headless", config.HEADLESS))
-    config.CDP_HEADLESS = config.HEADLESS
+    config.CDP_HEADLESS = bool(payload.get("cdp_headless", config.CDP_HEADLESS))
 
     config.ENABLE_CDP_MODE = bool(payload.get("enable_cdp_mode", config.ENABLE_CDP_MODE))
     config.ENABLE_IP_PROXY = bool(payload.get("enable_ip_proxy", config.ENABLE_IP_PROXY))

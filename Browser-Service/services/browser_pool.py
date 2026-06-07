@@ -34,7 +34,7 @@ CDP_PORT_END = int(os.getenv("CDP_PORT_END", "9321"))
 POOL_SIZE = int(os.getenv("BROWSER_POOL_SIZE", "5"))
 BROWSER_LAUNCH_TIMEOUT = int(os.getenv("BROWSER_LAUNCH_TIMEOUT", "30"))
 CUSTOM_BROWSER_PATH = os.getenv("CUSTOM_BROWSER_PATH", "")
-HEADLESS_DEFAULT = os.getenv("HEADLESS", "false").lower() == "true"
+HEADLESS_DEFAULT = os.getenv("HEADLESS", "true").lower() == "true"
 BROWSER_DATA_DIR = os.getenv("BROWSER_DATA_DIR", os.path.join(os.getcwd(), "browser_data"))
 
 

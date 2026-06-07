@@ -187,7 +187,7 @@ class TaskExecutor:
         self._playwright = await async_playwright().start()
 
         launch_options: Dict[str, Any] = {
-            "headless": self.config.get("headless", False),
+            "headless": self.config.get("headless", True),
             "args": [
                 "--disable-blink-features=AutomationControlled",
                 "--disable-dev-shm-usage",

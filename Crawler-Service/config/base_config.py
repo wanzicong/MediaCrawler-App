@@ -45,7 +45,7 @@ IP_PROXY_PROVIDER_NAME = "kuaidaili"  # kuaidaili | wandouhttp
 # Setting False will open a browser
 # If Xiaohongshu keeps scanning the code to log in but fails, open the browser and manually pass the sliding verification code.
 # If Douyin keeps prompting failure, open the browser and see if mobile phone number verification appears after scanning the QR code to log in. If it does, manually go through it and try again.
-HEADLESS = False
+HEADLESS = True
 
 # Whether to save login status
 SAVE_LOGIN_STATE = True
@@ -58,7 +58,7 @@ ENABLE_CDP_MODE = True
 
 # 是否在 CDP 模式下启用无头模式
 # 注意：即使设置为 True，某些反检测功能在无头模式下可能无法正常工作
-CDP_HEADLESS = False
+CDP_HEADLESS = True
 
 # ==================== Browser-Service 集成配置 ====================
 # 浏览器管理模式，控制爬虫如何获取和管理浏览器实例

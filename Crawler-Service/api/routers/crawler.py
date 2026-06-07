@@ -134,7 +134,7 @@ async def rerun_task(task_id: int, resume: bool = True):
         enable_comments=p.get("enable_comments", True),
         enable_sub_comments=p.get("enable_sub_comments", False),
         cookies=p.get("cookies", ""),
-        headless=p.get("headless", False),
+        headless=p.get("headless", True),
     )
 
     result = await crawler_manager.start(start_request)
@@ -199,6 +199,25 @@ async def get_logs(limit: int = 100):
     """Get recent logs"""
     logs = crawler_manager.logs[-limit:] if limit > 0 else crawler_manager.logs
     return {"logs": [log.model_dump() for log in logs]}
+
+
+@router.get("/tasks/{task_id}/logs")
+async def get_task_logs(
+    task_id: int,
+    level: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=10, le=500),
+):
+    """获取爬虫任务的持久化运行日志（代理到 Data-API）"""
+    params = {"page": page, "page_size": page_size}
+    if level:
+        params["level"] = level
+    async with httpx.AsyncClient(timeout=10.0, headers=INTERNAL_HEADERS) as client:
+        resp = await client.get(f"{DATA_API_URL}/api/internal/tasks/{task_id}/logs", params=params)
+        if resp.status_code == 404:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        resp.raise_for_status()
+        return resp.json()
 
 
 @router.post("/cleanup-zombies")

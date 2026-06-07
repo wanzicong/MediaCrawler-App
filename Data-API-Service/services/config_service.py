@@ -30,7 +30,7 @@ class ConfigService:
             "cookies": "",
             "headless": True,
             "enable_cdp_mode": True,
-            "cdp_headless": False,
+            "cdp_headless": True,
             "enable_ip_proxy": False,
             "ip_proxy_pool_count": 2,
             "ip_proxy_provider_name": "kuaidaili",
